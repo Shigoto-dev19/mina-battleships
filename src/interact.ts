@@ -1,5 +1,5 @@
 /**
- * This script can be used to interact with the Add contract, after deploying it.
+ * This script can be used to interact with the Battleships contract, after deploying it.
  *
  * We call the update() method on the contract, create a proof and send it to the chain.
  * The endpoint that we interact with is read from your config.json.
@@ -15,7 +15,7 @@
 import fs from 'fs/promises';
 import { NetworkId } from 'mina-signer';
 import { Mina, PrivateKey } from 'o1js';
-import { Add } from './Add.js';
+import { Battleships } from './Battleships.js';
 
 // check command line arg
 let deployAlias = process.argv[2];
@@ -65,19 +65,19 @@ const Network = Mina.Network({
 // const Network = Mina.Network(config.url);
 const fee = Number(config.fee) * 1e9; // in nanomina (1 billion = 1.0 mina)
 Mina.setActiveInstance(Network);
-let feepayerAddress = feepayerKey.toPublicKey();
-let zkAppAddress = zkAppKey.toPublicKey();
-let zkApp = new Add(zkAppAddress);
+let feepayerBattleshipsress = feepayerKey.toPublicKey();
+let zkAppBattleshipsress = zkAppKey.toPublicKey();
+let zkApp = new Battleships(zkAppBattleshipsress);
 
 let sentTx;
 // compile the contract to create prover keys
 console.log('compile the contract...');
-await Add.compile();
+await Battleships.compile();
 try {
-  // call update() and send transaction
+  // call init() and send transaction
   console.log('build transaction and create proof...');
-  let tx = await Mina.transaction({ sender: feepayerAddress, fee }, () => {
-    zkApp.update();
+  let tx = await Mina.transaction({ sender: feepayerBattleshipsress, fee }, () => {
+    zkApp.init();
   });
   await tx.prove();
   console.log('send transaction...');

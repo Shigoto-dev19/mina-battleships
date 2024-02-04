@@ -1,3 +1,3 @@
-import { Add } from './Add.js';
+import { Battleships } from './Battleships.js';
 
-export { Add };
+export { Battleships };
