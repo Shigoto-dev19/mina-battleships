@@ -8,8 +8,8 @@ import {
     method,
     SmartContract, 
     Struct,
-    Poseidon,
 } from 'o1js';
+import { BoardCircuit } from './client'; 
 
 export { Battleships }
 
@@ -40,24 +40,18 @@ class Battleships extends SmartContract {
     }
 
     @method hostGame(serializedBoard1: Field) {
-        const boardHash = Poseidon.hash([serializedBoard1]);  
-        //TODO deserializeBoard(serializedBoard1);
-        //TODO validateBoard();
-
+        const boardHash1 = BoardCircuit.validateBoard(serializedBoard1);  
         this.player1.set({
             address: this.sender,
-            boardHash,
+            boardHash: boardHash1,
         });
     }
 
     @method joinGame(serializedBoard2: Field) { 
-        const boardHash = Poseidon.hash([serializedBoard2]);
-        //TODO deserializeBoard(serializedBoard1);
-        //TODO validateBoard();
-
+        const boardHash2 = BoardCircuit.validateBoard(serializedBoard2);  
         this.player2.set({
             address: this.sender,
-            boardHash
+            boardHash: boardHash2,
         });
 
         this.joinable.set(Bool(false));
@@ -68,4 +62,7 @@ class Battleships extends SmartContract {
     @method finalizeGame() { return }
 }
 
+//TODO Test Board Circuit logic
+//TODO Add attack circuit
+//TODO Test attack circuit
 //TODO Add player client class
