@@ -5,7 +5,11 @@ import {
     Provable,
 } from 'o1js';
 
-export { BoardUtils, BoardCircuit }
+export { 
+    BoardUtils, 
+    BoardCircuit,
+    AttackCircuit,
+}
 
 class BoardUtils {
     //TODO refactor
@@ -45,7 +49,6 @@ class BoardUtils {
         return  Poseidon.hash(board.flat());
     }  
 }
-
 class BoardCircuit { 
     static validateShipInRange(ship: Field[], shipLength: number, errorMessage: string) { 
         // horizontal check: z=ship[2]=0 
@@ -83,13 +86,13 @@ class BoardCircuit {
     }
 
     static validateShipsLocation(ships: Field[][]) {
-        const shipLength = [5, 4, 3, 3, 2];
+        const shipLengths = [5, 4, 3, 3, 2];
         let boardMap: Field[] = [];
         for (let i = 0; i < 5; i++) {
             // range check
-            BoardCircuit.validateShipInRange(ships[i], shipLength[i], `Ship${i+1} is out of board range!`);
+            BoardCircuit.validateShipInRange(ships[i], shipLengths[i], `Ship${i+1} is out of board range!`);
             // collision check
-            boardMap = BoardCircuit.placeShip(ships[i], shipLength[i], boardMap,`Collision occured when placing Ship${i+1}!`);
+            boardMap = BoardCircuit.placeShip(ships[i], shipLengths[i], boardMap,`Collision occured when placing Ship${i+1}!`);
         }
     }
 
@@ -102,13 +105,69 @@ class BoardCircuit {
     }
 }
 
+class AttackCircuit {
+    /*
+    Determine whether or not a given ship is hit by a given shot x/y coordinate pair
+    */
+    static scanShip(shot: Field[], ship: Field[], shipLength: number) { 
+        // return hit result for a horizontal ship
+        const hitHorizontalShip = () => {
+            let xHit = Bool(false);
+            let yHit = Bool(false);
+            for (let i = 0; i < shipLength; i++) {
+                xHit = xHit.or(ship[0].add(i).equals(shot[0]));
+                yHit = yHit.or(ship[1].equals(shot[1]));
+            }
+            return xHit.and(yHit);
+        }
+        
+        // return hit result for a vertical ship
+        const hitVerticalShip = () => {
+            let xHit = Bool(false);
+            let yHit = Bool(false);
+            for (let i = 0; i < shipLength; i++) {
+                xHit = xHit.or(ship[0].equals(shot[0]));
+                yHit = yHit.or(ship[1].add(i).equals(shot[1]));
+            }
+            return xHit.and(yHit);
+        }
+
+        // true if hit, 0 if missed
+        const hitResult = Provable.if(ship[2].equals(1), hitVerticalShip(), hitHorizontalShip());
+        return hitResult
+    }
+
+    /*
+    determine whether or not a shot hit a given board arrangement
+    proving whether a given coordinate pair hits a ship placement
+    !assert board hash integrity before
+    */
+    static attack(ships: Field[][], shot: Field[]) { 
+        // assert that shot is in board range
+        shot[0].assertLessThan(10, 'shot x coordinat is out of bound!');
+        shot[1].assertLessThan(10, 'shot y coordinat is out of bound!');
+
+        // scan hit for all ships
+        const shipLengths = [5, 4, 3, 3, 2];
+        let hit = Bool(false);
+        for (let i=0; i<5; i++) {
+            hit = hit.or(AttackCircuit.scanShip(shot, ships[i], shipLengths[i]));
+        }
+
+        return hit;
+    }
+}
+
+
 // const player1Board = [
-//     [0, 1, 0],
+//     [0, 0, 0],
 //     [0, 1, 0],
 //     [0, 2, 0],
 //     [0, 3, 0],
 //     [0, 4, 0],
 // ];
+
+// const shot = [0, 2];
 
 // const serializedBoard = BoardUtils.serializeBoard(player1Board);
 // let deserializeBoard = BoardUtils.deserializeBoard(serializedBoard).flat().map(x => Number(x.toBigInt()));
@@ -116,11 +175,18 @@ class BoardCircuit {
 // console.log('initial board: ', player1Board.flat());
 // console.log('deserialized board: ', deserializeBoard);
 
-// //TODO Add board integration tests 
-// //TODO? confirm board circuit is provable
 
+// // verifies that board circuit is provable
 // console.time('board witness');
 // Provable.runAndCheck(() => {
 //     BoardCircuit.validateShipsLocation(player1Board.map(ship => ship.map(Field)))
 // });
 // console.timeEnd('board witness');
+
+// // verifies that attack circuit is provable
+// console.time('attack witness');
+// Provable.runAndCheck(() => {
+//     let hit = AttackCircuit.attack(BoardUtils.parse(player1Board), shot.map(Field));
+//     Provable.log('hit: ', hit.toBoolean())
+// });
+// console.timeEnd('attack witness');
