@@ -144,8 +144,8 @@ class AttackCircuit {
     */
     static attack(ships: Field[][], shot: Field[]) { 
         // assert that shot is in board range
-        shot[0].assertLessThan(10, 'shot x coordinat is out of bound!');
-        shot[1].assertLessThan(10, 'shot y coordinat is out of bound!');
+        shot[0].assertLessThan(10, 'target x coordinate is out of bound!');
+        shot[1].assertLessThan(10, 'target y coordinate is out of bound!');
 
         // scan hit for all ships
         const shipLengths = [5, 4, 3, 3, 2];
@@ -157,24 +157,6 @@ class AttackCircuit {
         return hit;
     }
 }
-
-
-// const player1Board = [
-//     [0, 0, 0],
-//     [0, 1, 0],
-//     [0, 2, 0],
-//     [0, 3, 0],
-//     [0, 4, 0],
-// ];
-
-// const shot = [0, 2];
-
-// const serializedBoard = BoardUtils.serializeBoard(player1Board);
-// let deserializeBoard = BoardUtils.deserializeBoard(serializedBoard).flat().map(x => Number(x.toBigInt()));
-
-// console.log('initial board: ', player1Board.flat());
-// console.log('deserialized board: ', deserializeBoard);
-
 
 // // verifies that board circuit is provable
 // console.time('board witness');

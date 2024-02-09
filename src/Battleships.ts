@@ -62,7 +62,7 @@ class Battleships extends SmartContract {
     @method finalizeGame() { return }
 }
 
-//TODO Test attack circuit
+//TODO Complete game architecture
 //TODO Add player client class
 //? 1. Save adversary encrypted boards on-chain 
 //? 2. encryption privateKey should only be knwon to the zkapp itself
