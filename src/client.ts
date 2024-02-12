@@ -13,7 +13,7 @@ export {
 
 class BoardUtils {
     //TODO refactor
-    static serializeBoard(board: number[][]) { 
+    static serialize(board: number[][]) { 
         let serializedCoordinates: Bool[][][] = [];
         for (const shipCoordinates of board) { 
             let x = Field(shipCoordinates[0]).toBits(8);
@@ -26,7 +26,7 @@ class BoardUtils {
         return serializedBoard
     }
 
-    static deserializeBoard(serializedBoard: Field) { 
+    static deserialize(serializedBoard: Field) { 
         const splitArrayIntoGroups= <T>(array: T[], groupSize: number): T[][] => { 
             let result: T[][] = [];
             for (let i = 0; i < array.length; i += groupSize) {
@@ -97,7 +97,7 @@ class BoardCircuit {
     }
 
     static validateBoard(serializedBoard: Field) { 
-        const board = BoardUtils.deserializeBoard(serializedBoard);
+        const board = BoardUtils.deserialize(serializedBoard);
         this.validateShipsLocation(board);
         const boardHash = BoardUtils.hash(board);
         

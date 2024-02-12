@@ -14,7 +14,7 @@ describe('Board Tests', () => {
             const parsedShips = BoardUtils.parse(ships);
             const hash = BoardUtils.hash(parsedShips);
             
-            const serializedBoard = BoardUtils.serializeBoard(ships); 
+            const serializedBoard = BoardUtils.serialize(ships); 
             const validationHash = BoardCircuit.validateBoard(serializedBoard);
             expect(validationHash).toEqual(hash);
         }
@@ -56,7 +56,7 @@ describe('Board Tests', () => {
     describe('Out of Bound Checks', () => {
         function testInvalidRange(ships: number[][], errorMessage?: string) {      
             const validationRangeError = () => {
-                const serializedBoard = BoardUtils.serializeBoard(ships); 
+                const serializedBoard = BoardUtils.serialize(ships); 
                 BoardCircuit.validateBoard(serializedBoard);
             }
             expect(validationRangeError).toThrowError(errorMessage);
@@ -98,7 +98,7 @@ describe('Board Tests', () => {
 
     describe("Collision Checks", () => {
         function testCollision(ships: number[][], errorMessage: string) { 
-            const serializedBoard = BoardUtils.serializeBoard(ships); 
+            const serializedBoard = BoardUtils.serialize(ships); 
             const validationCollisionrror = () => {
                 BoardCircuit.validateBoard(serializedBoard);
             }
