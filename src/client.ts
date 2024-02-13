@@ -8,6 +8,7 @@ import {
 export { 
     BoardUtils, 
     BoardCircuit,
+    AttackUtils,
     AttackCircuit,
 }
 
@@ -41,6 +42,7 @@ class BoardUtils {
 
         return board
     }
+
     static parse(board: number[][]) { 
         return board.map((ship) => ship.map(Field))
     } 
@@ -48,6 +50,11 @@ class BoardUtils {
     static hash(board: Field[][]) { 
         return  Poseidon.hash(board.flat());
     }  
+
+    static hashSerialized(serializedBoard: Field) { 
+        const deserializedBoard = BoardUtils.deserialize(serializedBoard);
+        return BoardUtils.hash(deserializedBoard);
+    }
 }
 class BoardCircuit { 
     static validateShipInRange(ship: Field[], shipLength: number, errorMessage: string) { 
@@ -77,9 +84,12 @@ class BoardCircuit {
         let index = ship[0].add(ship[1].mul(10));
         for(let i=0; i<shipLength; i++) {
             let coordinate = index.add(i).add(increment);
-            let check = boardMap.some(item => item.equals(coordinate).toBoolean());
-            // Provable.log('check: ', check)
-            Bool(check).assertFalse(errorMessage);
+            //? fixed => toBoolean() => not provable
+            let check = Provable.witness(Bool, () => {
+                let collisionExists = boardMap.some(item => item.equals(coordinate).toBoolean());
+                return Bool(collisionExists)
+            });
+            check.assertFalse(errorMessage);
             boardMap.push(coordinate);
         }
         return boardMap
@@ -105,6 +115,29 @@ class BoardCircuit {
     }
 }
 
+class AttackUtils { 
+    static serializeTarget(target: number[]) { 
+        const parsedTarget = AttackUtils.parseTarget(target);
+
+        const xBits = parsedTarget[0].toBits(3);
+        const yBits = parsedTarget[1].toBits(3);
+        const serializedTarget = Field.fromBits([...xBits, ...yBits]);
+
+        return serializedTarget
+    }
+
+    static deserializeTarget(serializedTarget: Field) { 
+        const bits = serializedTarget.toBits(6);
+        const targetX = Field.fromBits(bits.slice(0, 3));
+        const targetY = Field.fromBits(bits.slice(3, 6));
+
+        return [targetX, targetY];
+    }
+
+    static parseTarget(target: number[]) {
+        return target.map(Field);
+    }
+}
 class AttackCircuit {
     /*
     Determine whether or not a given ship is hit by a given shot x/y coordinate pair
@@ -165,10 +198,9 @@ class AttackCircuit {
 // });
 // console.timeEnd('board witness');
 
-// // verifies that attack circuit is provable
+// verifies that attack circuit is provable
 // console.time('attack witness');
 // Provable.runAndCheck(() => {
 //     let hit = AttackCircuit.attack(BoardUtils.parse(player1Board), shot.map(Field));
-//     Provable.log('hit: ', hit.toBoolean())
 // });
 // console.timeEnd('attack witness');
