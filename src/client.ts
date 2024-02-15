@@ -3,6 +3,7 @@ import {
     Bool,
     Poseidon,
     Provable,
+    PublicKey,
 } from 'o1js';
 
 export { 
@@ -55,6 +56,11 @@ class BoardUtils {
         const deserializedBoard = BoardUtils.deserialize(serializedBoard);
         return BoardUtils.hash(deserializedBoard);
     }
+
+    static generatePlayerId(serializedBoard: Field, playerAddress: PublicKey) {
+        const boardHash = BoardUtils.hashSerialized(serializedBoard);
+        return Poseidon.hash([boardHash, ...playerAddress.toFields()]);
+    }
 }
 class BoardCircuit { 
     static validateShipInRange(ship: Field[], shipLength: number, errorMessage: string) { 
@@ -84,7 +90,6 @@ class BoardCircuit {
         let index = ship[0].add(ship[1].mul(10));
         for(let i=0; i<shipLength; i++) {
             let coordinate = index.add(i).add(increment);
-            //? fixed => toBoolean() => not provable
             let check = Provable.witness(Bool, () => {
                 let collisionExists = boardMap.some(item => item.equals(coordinate).toBoolean());
                 return Bool(collisionExists)
@@ -204,3 +209,4 @@ class AttackCircuit {
 //     let hit = AttackCircuit.attack(BoardUtils.parse(player1Board), shot.map(Field));
 // });
 // console.timeEnd('attack witness');
+

@@ -1,6 +1,5 @@
 import { 
     Field, 
-    Bool,
     UInt8,
     state, 
     State,
@@ -20,8 +19,6 @@ import {
 export { Battleships }
 
 class Battleships extends SmartContract { 
-    @state(Bool) joinable = State<Bool>();
-    @state(Bool) finished = State<Bool>();
     @state(Field) player1Id = State<Field>();
     @state(Field) player2Id = State<Field>();
     @state(UInt8) turns = State<UInt8>();
@@ -30,8 +27,6 @@ class Battleships extends SmartContract {
 
     initGame() { 
         super.init();
-        this.joinable.set(Bool(true));
-        this.finished.set(Bool(false));
         this.player1Id.set(Field(0));
         this.player2Id.set(Field(0));
         this.turns.set(UInt8.from(0));
@@ -39,23 +34,44 @@ class Battleships extends SmartContract {
     }
 
     @method hostGame(serializedBoard1: Field) {
+        // fetch on-chain player1 ID
+        const host = this.player1Id.getAndRequireEquals();
+        
+        /**
+         * Assert that hostID is not updated yet.
+         * !Make sure nobody tampers with the host ID once updated!
+         */ 
+        host.assertEquals(0, "This game has already a host!");
+
+        // assert that host ships placement is valid
         const boardHash1 = BoardCircuit.validateBoard(serializedBoard1);  
+
+        // calculate host ID & store it on-chain
         const hostId = Poseidon.hash([boardHash1, ...this.sender.toFields()]);
         this.player1Id.set(hostId);
     }   
 
     @method joinGame(serializedBoard2: Field) { 
-        this.joinable.getAndRequireEquals().assertTrue('This game is already full!');
-        const boardHash2 = BoardCircuit.validateBoard(serializedBoard2);  
-        const joinerId = Poseidon.hash([boardHash2, ...this.sender.toFields()]);
+        //TODO? check if the game is hosted
+        //TODO? refer to each game to be joinable by a gameID
 
-        this.player2Id.set(joinerId);
+        // fetch on-chain player2 ID
+        const joiner = this.player2Id.getAndRequireEquals();
+
+        // assert that no one has already joined the game
+        joiner.assertEquals(0, 'This game is already full!');
+
+        // assert that joiner ships placement is valid
+        const boardHash2 = BoardCircuit.validateBoard(serializedBoard2);  
         
-        // set joinable to false to prevent calling this method 
-        this.joinable.set(Bool(false));
+        // calculate joiner ID & store it on-chain
+        const joinerId = Poseidon.hash([boardHash2, ...this.sender.toFields()]);
+        this.player2Id.set(joinerId);
     }
 
     @method firstTurn(target: Field) {
+        //TODO assert only player1 to call this method
+
         const turns = this.turns.getAndRequireEquals();
         turns.assertEquals(0, "Opening attack can only be played at the beginning of the game!");
         
@@ -126,9 +142,6 @@ class Battleships extends SmartContract {
 //TODO Complete game architecture
 //TODO Add player client class
 //TODO Reset game when finished
-
-//TODO Track joinability following turn counter
-//TODO hash player address + board hash
 
 //TODO? Emit event following game actions
 
