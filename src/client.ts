@@ -124,17 +124,17 @@ class AttackUtils {
     static serializeTarget(target: number[]) { 
         const parsedTarget = AttackUtils.parseTarget(target);
 
-        const xBits = parsedTarget[0].toBits(3);
-        const yBits = parsedTarget[1].toBits(3);
+        const xBits = parsedTarget[0].toBits(4);
+        const yBits = parsedTarget[1].toBits(4);
         const serializedTarget = Field.fromBits([...xBits, ...yBits]);
 
         return serializedTarget
     }
 
     static deserializeTarget(serializedTarget: Field) { 
-        const bits = serializedTarget.toBits(6);
-        const targetX = Field.fromBits(bits.slice(0, 3));
-        const targetY = Field.fromBits(bits.slice(3, 6));
+        const bits = serializedTarget.toBits(8);
+        const targetX = Field.fromBits(bits.slice(0, 4));
+        const targetY = Field.fromBits(bits.slice(4, 8));
 
         return [targetX, targetY];
     }
@@ -209,4 +209,3 @@ class AttackCircuit {
 //     let hit = AttackCircuit.attack(BoardUtils.parse(player1Board), shot.map(Field));
 // });
 // console.timeEnd('attack witness');
-

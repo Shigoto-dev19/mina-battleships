@@ -69,16 +69,29 @@ class Battleships extends SmartContract {
         this.player2Id.set(joinerId);
     }
 
-    @method firstTurn(target: Field) {
-        //TODO assert only player1 to call this method
-
+    @method firstTurn(serializedTarget: Field, serializedBoard: Field) {
+        // fetch the on-chain turn counter and verify that it is the first turn
         const turns = this.turns.getAndRequireEquals();
         turns.assertEquals(0, "Opening attack can only be played at the beginning of the game!");
+
+        // generate the sender's player ID
+        const computedPlayerId = BoardUtils.generatePlayerId(serializedBoard, this.sender);
+
+        // fetch on-chain host ID 
+        const hostId = this.player1Id.getAndRequireEquals();
+
+        // restrict access to this method to the game's host
+        computedPlayerId.assertEquals(hostId, 'Only the host is allowed to play the opening shot!')
+        
+        // validate that the target is in the game map range
+        const target = AttackUtils.deserializeTarget(serializedTarget);
+        target[0].assertLessThan(10, 'Target x coordinate is out of bound!');
+        target[1].assertLessThan(10, 'Target y coordinate is out of bound!');
         
         // store the target for the adversary to prove on his board in the next turn
-        this.target.set(target);
+        this.target.set(serializedTarget);
 
-        // increment turn counter
+        // increment the turn counter
         this.turns.set(turns.add(1));
     }
 

@@ -7,7 +7,7 @@ import {
   PublicKey,
   UInt8,
 } from 'o1js';
-import { BoardUtils } from './client';
+import { AttackUtils, BoardUtils } from './client';
 
 const proofsEnabled = false;
 
@@ -105,14 +105,14 @@ describe('Battleships Game Tests', () => {
         const computedHostId = BoardUtils.generatePlayerId(hostSerializedBoard, player1Key.toPublicKey());
 
         // fetch the updated player1Id on-chain
-        const hostId = zkapp.player1Id.get()
+        const hostId = zkapp.player1Id.get();
         
         // assert that the computed host ID is compliant with the ID stored on-chain
         expect(computedHostId).toEqual(hostId);
       });
 
       it('should prevent other players to re-host a game', async () => {
-        const meddlerBoard =[
+        const meddlerBoard = [
           [9, 0, 1],
           [9, 5, 1],
           [6, 9, 0],
@@ -136,7 +136,7 @@ describe('Battleships Game Tests', () => {
 
     describe('joinGame method tests', () => {
       it('should join a game and update player2Id', async () => {
-        const joinerBoard =[
+        const joinerBoard = [
           [9, 0, 1],
           [9, 5, 1],
           [6, 9, 0],
@@ -163,7 +163,7 @@ describe('Battleships Game Tests', () => {
       });
 
       it('should prevent other players to join a full game', async () => {
-        const meddlerBoard =[
+        const meddlerBoard = [
           [9, 0, 1],
           [9, 5, 1],
           [6, 9, 0],
@@ -182,6 +182,134 @@ describe('Battleships Game Tests', () => {
         }
         
         expect(meddlerJoinTX).rejects.toThrowError('This game is already full!');
+      });
+    });
+
+    describe('firstTurn method tests', () => {
+      it('should reject any caller other than the host', async () => {
+        const player2Board = [
+          [9, 0, 1],
+          [9, 5, 1],
+          [6, 9, 0],
+          [6, 8, 0],
+          [7, 7, 0],
+        ];
+
+        const serializedBoard = BoardUtils.serialize(player2Board);
+        const serializedTarget = AttackUtils.serializeTarget([0, 7]);
+
+        const rejectedFirstTurnTx = async () => {
+          let firstTurnTx = await Mina.transaction(player2Key.toPublicKey(), () => {
+            zkapp.firstTurn(serializedTarget, serializedBoard);
+          });
+
+          await firstTurnTx.prove();
+          await firstTurnTx.sign([player2Key]).send();
+        }
+
+        const errorMessage = 'Only the host is allowed to play the opening shot!';
+        expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
+      });
+
+      it('should reject an invalid target: x coordinate', async () => {
+        const hostBoard = [
+          [0, 0, 0],
+          [0, 1, 0],
+          [0, 2, 0],
+          [0, 3, 0],
+          [0, 4, 0],
+        ];
+        
+        const serializedBoard = BoardUtils.serialize(hostBoard);
+        const serializedTarget = AttackUtils.serializeTarget([10, 7]);
+
+        const rejectedFirstTurnTx = async () => {
+          let firstTurnTx = await Mina.transaction(player1Key.toPublicKey(), () => {
+            zkapp.firstTurn(serializedTarget, serializedBoard);
+          });
+
+          await firstTurnTx.prove();
+          await firstTurnTx.sign([player1Key]).send();
+        }
+
+        const errorMessage = 'Target x coordinate is out of bound!';
+        expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
+      });
+
+      it('should reject an invalid target: y coordinate', async () => {
+        const hostBoard = [
+          [0, 0, 0],
+          [0, 1, 0],
+          [0, 2, 0],
+          [0, 3, 0],
+          [0, 4, 0],
+        ];
+        
+        const serializedBoard = BoardUtils.serialize(hostBoard);
+        const serializedTarget = AttackUtils.serializeTarget([3, 11]);
+
+        const rejectedFirstTurnTx = async () => {
+          let firstTurnTx = await Mina.transaction(player1Key.toPublicKey(), () => {
+            zkapp.firstTurn(serializedTarget, serializedBoard);
+          });
+
+          await firstTurnTx.prove();
+          await firstTurnTx.sign([player1Key]).send();
+        }
+
+        const errorMessage = 'Target y coordinate is out of bound!';
+        expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
+      });
+
+      it('should accept a valid TX and update target on-chain', async () => {
+        const hostBoard = [
+          [0, 0, 0],
+          [0, 1, 0],
+          [0, 2, 0],
+          [0, 3, 0],
+          [0, 4, 0],
+        ];
+
+        const serializedBoard = BoardUtils.serialize(hostBoard);
+        const serializedTarget = AttackUtils.serializeTarget([3, 4]);
+
+        let firstTurnTx = await Mina.transaction(player1Key.toPublicKey(), () => {
+          zkapp.firstTurn(serializedTarget, serializedBoard);
+        });
+
+        await firstTurnTx.prove();
+        await firstTurnTx.sign([player1Key]).send();
+
+        // fetch the updated target on-chain
+        const storedTarget = zkapp.target.get();
+
+        // assert that the target is successfully updated
+        expect(storedTarget).toEqual(serializedTarget);
+      });
+
+      it('should reject calling the method more than once', async () => {
+        const hostBoard = [
+          [0, 0, 0],
+          [0, 1, 0],
+          [0, 2, 0],
+          [0, 3, 0],
+          [0, 4, 0],
+        ];
+        
+        const serializedBoard = BoardUtils.serialize(hostBoard);
+        const serializedTarget = AttackUtils.serializeTarget([3, 4]);
+
+        const rejectedFirstTurnTx = async () => {
+          let firstTurnTx = await Mina.transaction(player1Key.toPublicKey(), () => {
+            zkapp.firstTurn(serializedTarget, serializedBoard);
+          });
+
+          await firstTurnTx.prove();
+          await firstTurnTx.sign([player1Key]).send();
+        }
+
+        const errorMessage = 'Opening attack can only be played at the beginning of the game!';
+        expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
       });
     });
 });
