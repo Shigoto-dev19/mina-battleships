@@ -57,6 +57,25 @@ whether a game is joinable or not.
 - Store hit history of a sequence of bits.
     - This is quite adequate regarding that a hit result is binary (1 if hit & 0 if missed).
 
+### First Turn 
+
+- The `firstTurn` method doesn't return an attack result or even use the player's board.
+    - **NOTE:** The first method takes the player's board as an argument but that's only to generate and verify player's ID.
+- Following the attack principle of the game:
+    1. player should fetch his adversary's target on-chain
+    2. scan it through his/her board off-chain
+    3. store the adversary's hit result on-chain
+- The game principle preserves players' board privacy but causes a delay of one turn to report the hit result to the adversary.
+- Because this delay is inevitable, the first player(host) should only select his target store it on-chain to initiate the alternative attack sequence.
+    
+- The `firstTurn` method works as follows: 
+    1. Assert that the game didn't start yet(this.turns === 0).
+    2. Restrict access to the host(generate ID and verify).
+    3. Validate that the host's target is in game map range.
+        - NOTE: The attack method validates the target but having an invalid target at the first turn will require the host to replay the **first turn** which can mess up with the order of the game!
+    4. Storage player's target on-chain.
+    5. Increment turn counter.
+    
 ## Feedback
 
 - I realized that verifying code with `Provable.runAndCheck()` does not validate code provability.
