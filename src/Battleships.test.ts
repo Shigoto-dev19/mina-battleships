@@ -1,4 +1,4 @@
-import { Battleships } from './Battleships';
+import { Battleships, TargetMerkleWitness } from './Battleships';
 import {
   Field, 
   Mina,
@@ -6,6 +6,7 @@ import {
   PrivateKey,
   PublicKey,
   UInt8,
+  MerkleTree,
 } from 'o1js';
 import { AttackUtils, BoardUtils } from './client';
 
@@ -31,7 +32,7 @@ async function initializeGame(zkapp: Battleships, deployerKey: PrivateKey) {
   });
 
   await initTx.prove();
-  // await initTxn.sign([deployerKey]).send();
+  await initTx.sign([deployerKey]).send();
 }
 
 
@@ -41,7 +42,8 @@ describe('Battleships Game Tests', () => {
     player2Key: PrivateKey, 
     zkappAddress: PublicKey,
     zkappPrivateKey: PrivateKey,
-    zkapp: Battleships;
+    zkapp: Battleships,
+    targetTree: MerkleTree;
   
     beforeAll(async () => {
       if (proofsEnabled) await Battleships.compile();
@@ -58,6 +60,9 @@ describe('Battleships Game Tests', () => {
       zkappPrivateKey = PrivateKey.random();
       zkappAddress = zkappPrivateKey.toPublicKey();
       zkapp = new Battleships(zkappAddress);
+
+      // initialize local Merkle Tree for target storage
+      targetTree = new MerkleTree(8);
     });
 
     describe('Deploy and initialize Battleships zkApp', () => {
@@ -75,11 +80,14 @@ describe('Battleships Game Tests', () => {
         expect(player2Id).toEqual(Field(0));
 
         const turns = zkapp.turns.get();
-        expect(turns).toEqual(UInt8.from(0));
+        expect(turns). toEqual(new UInt8(0));
+
+        const targetRoot = zkapp.targetRoot.get();
+        expect(targetRoot).toEqual(Field(14472842460125086645444909368571209079194991627904749620726822601198914470820n));
 
         
-        const hitHistory = zkapp.hitHistory.get();
-        expect(hitHistory).toEqual(Field(0));
+        // const hitHistory = zkapp.hitHistory.get();
+        // expect(hitHistory).toEqual(Field(0));
       });
     });
 
@@ -195,12 +203,16 @@ describe('Battleships Game Tests', () => {
           [7, 7, 0],
         ];
 
+        let index = zkapp.turns.get();
+        let w = targetTree.getWitness(index.toBigInt());
+        let targetWitness = new TargetMerkleWitness(w);
+
         const serializedBoard = BoardUtils.serialize(player2Board);
         const serializedTarget = AttackUtils.serializeTarget([0, 7]);
 
         const rejectedFirstTurnTx = async () => {
           let firstTurnTx = await Mina.transaction(player2Key.toPublicKey(), () => {
-            zkapp.firstTurn(serializedTarget, serializedBoard);
+            zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
           });
 
           await firstTurnTx.prove();
@@ -219,13 +231,17 @@ describe('Battleships Game Tests', () => {
           [0, 3, 0],
           [0, 4, 0],
         ];
+
+        let index = zkapp.turns.get();
+        let w = targetTree.getWitness(index.toBigInt());
+        let targetWitness = new TargetMerkleWitness(w);
         
         const serializedBoard = BoardUtils.serialize(hostBoard);
         const serializedTarget = AttackUtils.serializeTarget([10, 7]);
 
         const rejectedFirstTurnTx = async () => {
           let firstTurnTx = await Mina.transaction(player1Key.toPublicKey(), () => {
-            zkapp.firstTurn(serializedTarget, serializedBoard);
+            zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
           });
 
           await firstTurnTx.prove();
@@ -244,13 +260,17 @@ describe('Battleships Game Tests', () => {
           [0, 3, 0],
           [0, 4, 0],
         ];
+
+        let index = zkapp.turns.get();
+        let w = targetTree.getWitness(index.toBigInt());
+        let targetWitness = new TargetMerkleWitness(w);
         
         const serializedBoard = BoardUtils.serialize(hostBoard);
         const serializedTarget = AttackUtils.serializeTarget([3, 11]);
 
         const rejectedFirstTurnTx = async () => {
           let firstTurnTx = await Mina.transaction(player1Key.toPublicKey(), () => {
-            zkapp.firstTurn(serializedTarget, serializedBoard);
+            zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
           });
 
           await firstTurnTx.prove();
@@ -261,7 +281,7 @@ describe('Battleships Game Tests', () => {
         expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
       });
 
-      it('should accept a valid TX and update target on-chain', async () => {
+      it('should reject an non-compliant target off-chain tree: empty leaf/ false index', async () => {
         const hostBoard = [
           [0, 0, 0],
           [0, 1, 0],
@@ -270,11 +290,105 @@ describe('Battleships Game Tests', () => {
           [0, 4, 0],
         ];
 
+        let index = 2n;
+        let w = targetTree.getWitness(index);
+        let targetWitness = new TargetMerkleWitness(w);
+        
+        const serializedBoard = BoardUtils.serialize(hostBoard);
+        const serializedTarget = AttackUtils.serializeTarget([3, 9]);
+
+        const rejectedFirstTurnTx = async () => {
+          let firstTurnTx = await Mina.transaction(player1Key.toPublicKey(), () => {
+            zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
+          });
+
+          await firstTurnTx.prove();
+          await firstTurnTx.sign([player1Key]).send();
+        }
+
+        const errorMessage = 'Target storage index is not compliant with turn counter!';
+        expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
+      });
+
+      it.skip('should reject an non-compliant target off-chain tree: full leaf / correct index', async () => {
+        const hostBoard = [
+          [0, 0, 0],
+          [0, 1, 0],
+          [0, 2, 0],
+          [0, 3, 0],
+          [0, 4, 0],
+        ];
+
+        let index = 0n;
+        targetTree.setLeaf(0n, Field(123));
+        let w = targetTree.getWitness(index);
+        let targetWitness = new TargetMerkleWitness(w);
+        
+        const serializedBoard = BoardUtils.serialize(hostBoard);
+        const serializedTarget = AttackUtils.serializeTarget([3, 4]);
+
+        const rejectedFirstTurnTx = async () => {
+          let firstTurnTx = await Mina.transaction(player1Key.toPublicKey(), () => {
+            zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
+          });
+
+          await firstTurnTx.prove();
+          await firstTurnTx.sign([player1Key]).send();
+        }
+
+        const errorMessage = 'Off-chain target merkle tree is out of sync!';
+        expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
+      });
+
+      it('should reject an non-compliant target off-chain tree: tampered tree', async () => {
+        const hostBoard = [
+          [0, 0, 0],
+          [0, 1, 0],
+          [0, 2, 0],
+          [0, 3, 0],
+          [0, 4, 0],
+        ];
+
+        let index = 12n;
+        targetTree.setLeaf(index, Field(123));
+        let w = targetTree.getWitness(0n);
+        let targetWitness = new TargetMerkleWitness(w);
+        
+        const serializedBoard = BoardUtils.serialize(hostBoard);
+        const serializedTarget = AttackUtils.serializeTarget([3, 4]);
+
+        const rejectedFirstTurnTx = async () => {
+          let firstTurnTx = await Mina.transaction(player1Key.toPublicKey(), () => {
+            zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
+          });
+
+          await firstTurnTx.prove();
+          await firstTurnTx.sign([player1Key]).send();
+        }
+
+        const errorMessage = 'Off-chain target merkle tree is out of sync!';
+        expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
+      });
+
+      it('should accept a valid TX and update target on-chain', async () => {
+        targetTree = new MerkleTree(8);
+        const hostBoard = [
+          [0, 0, 0],
+          [0, 1, 0],
+          [0, 2, 0],
+          [0, 3, 0],
+          [0, 4, 0],
+        ];
+
+        let index = zkapp.turns.get();
+        let w = targetTree.getWitness(index.toBigInt());
+        let targetWitness = new TargetMerkleWitness(w);
+
         const serializedBoard = BoardUtils.serialize(hostBoard);
         const serializedTarget = AttackUtils.serializeTarget([3, 4]);
 
         let firstTurnTx = await Mina.transaction(player1Key.toPublicKey(), () => {
-          zkapp.firstTurn(serializedTarget, serializedBoard);
+          zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
         });
 
         await firstTurnTx.prove();
@@ -285,6 +399,9 @@ describe('Battleships Game Tests', () => {
 
         // assert that the target is successfully updated
         expect(storedTarget).toEqual(serializedTarget);
+
+        // update off-chain address tree
+        targetTree.setLeaf(index.toBigInt(), storedTarget); 
       });
 
       it('should reject calling the method more than once', async () => {
@@ -295,13 +412,17 @@ describe('Battleships Game Tests', () => {
           [0, 3, 0],
           [0, 4, 0],
         ];
+
+        let index = zkapp.turns.get();
+        let w = targetTree.getWitness(index.toBigInt());
+        let targetWitness = new TargetMerkleWitness(w);
         
         const serializedBoard = BoardUtils.serialize(hostBoard);
         const serializedTarget = AttackUtils.serializeTarget([3, 4]);
 
         const rejectedFirstTurnTx = async () => {
           let firstTurnTx = await Mina.transaction(player1Key.toPublicKey(), () => {
-            zkapp.firstTurn(serializedTarget, serializedBoard);
+            zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
           });
 
           await firstTurnTx.prove();

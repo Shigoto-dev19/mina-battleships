@@ -7,6 +7,8 @@ import {
     SmartContract, 
     Provable,
     Poseidon,
+    Bool,
+    MerkleWitness,
 } from 'o1js';
 
 import { 
@@ -16,21 +18,38 @@ import {
     AttackCircuit, 
 } from './client.js'; 
 
-export { Battleships }
+export { 
+    Battleships,
+    TargetMerkleWitness,
+    HitMerkleWitness, 
+}
+
+class TargetMerkleWitness extends MerkleWitness(8) {}
+class HitMerkleWitness extends MerkleWitness(8) {}
 
 class Battleships extends SmartContract { 
     @state(Field) player1Id = State<Field>();
     @state(Field) player2Id = State<Field>();
     @state(UInt8) turns = State<UInt8>();
     @state(Field) target = State<Field>();
-    @state(Field) hitHistory = State<Field>();
+    @state(Field) targetRoot = State<Field>();
+    @state(Bool) hitResult = State<Bool>();
+    @state(Field) hitRoot = State<Field>();
 
-    initGame() { 
+    @method initGame() { 
         super.init();
+        
         this.player1Id.set(Field(0));
         this.player2Id.set(Field(0));
         this.turns.set(UInt8.from(0));
-        this.hitHistory.set(Field(0));
+
+        const EMPTY_TREE8_ROOT = Field(14472842460125086645444909368571209079194991627904749620726822601198914470820n);
+
+        // set target commitment as the root of an empty Merkle Tree of size 256
+        this.targetRoot.set(Field(EMPTY_TREE8_ROOT));
+        
+        // set hit commitment as the root of an empty Merkle Tree of size 256
+        this.hitRoot.set(EMPTY_TREE8_ROOT);
     }
 
     @method hostGame(serializedBoard1: Field) {
@@ -69,7 +88,7 @@ class Battleships extends SmartContract {
         this.player2Id.set(joinerId);
     }
 
-    @method firstTurn(serializedTarget: Field, serializedBoard: Field) {
+    @method firstTurn(serializedTarget: Field, serializedBoard: Field, targetWitness: TargetMerkleWitness) {
         // fetch the on-chain turn counter and verify that it is the first turn
         const turns = this.turns.getAndRequireEquals();
         turns.assertEquals(0, "Opening attack can only be played at the beginning of the game!");
@@ -84,20 +103,37 @@ class Battleships extends SmartContract {
         computedPlayerId.assertEquals(hostId, 'Only the host is allowed to play the opening shot!')
         
         // validate that the target is in the game map range
-        const target = AttackUtils.deserializeTarget(serializedTarget);
-        target[0].assertLessThan(10, 'Target x coordinate is out of bound!');
-        target[1].assertLessThan(10, 'Target y coordinate is out of bound!');
+        AttackUtils.validateTarget(serializedTarget);
         
         // store the target for the adversary to prove on his board in the next turn
         this.target.set(serializedTarget);
+
+        // assert root index compliance with the turn counter
+        targetWitness.calculateIndex().assertEquals(turns.value, "Target storage index is not compliant with turn counter!");
+        
+        /* 
+        1. check that the address leaf is empty 
+            --> prevent updating an already full target leaf
+        2. check that the off-chain address storage is in sync
+            --> a witness of an empty leaf(before update) maintains the same root(commitiment)
+        */ 
+        let currentTargetRoot = targetWitness.calculateRoot(Field(0));
+
+        this.targetRoot.getAndRequireEquals().assertEquals(currentTargetRoot, 'Off-chain target merkle tree is out of sync!');
+
+        // calculate the new merkle root following the updated target root
+        let updatedTargetRoot = targetWitness.calculateRoot(serializedTarget);
+
+        // update the on-chain target Merkle Tree commitment(root)
+        this.targetRoot.set(updatedTargetRoot);
 
         // increment the turn counter
         this.turns.set(turns.add(1));
     }
 
-    @method attack(serializedTarget: Field, serializedBoard: Field) { 
+    @method attack(serializedTarget: Field, serializedBoard: Field, targetWitness: TargetMerkleWitness, hitWitness: HitMerkleWitness) { 
         let turns = this.turns.getAndRequireEquals();
-        turns.assertGreaterThan(0, "Host should play the opening shot first!")
+        turns.assertGreaterThan(0, "Please wait for the host to play the opening shot first!")
         
         let player1Id = this.player1Id.getAndRequireEquals();
         let player2Id = this.player2Id.getAndRequireEquals();
@@ -130,16 +166,18 @@ class Battleships extends SmartContract {
         let adversaryTarget = AttackUtils.deserializeTarget(adversarySerializedTarget);
         let hitResult = AttackCircuit.attack(deserializedBoard, adversaryTarget);
         
-        let hitHistory = this.hitHistory.getAndRequireEquals();
+        //TODO field size storage doesn't change 
+        // let hitHistory = this.hitHistory.getAndRequireEquals();
         //! toNumber() => not provable
-        let hitHistoryBits = hitHistory.toBits(turns.toNumber());
-        hitHistoryBits[turns.toNumber()] = hitResult;
+        
+        // let hitHistoryBits = hitHistory.toBits(turns.toNumber());
+        // hitHistoryBits[turns.toNumber()] = hitResult;
         
         //TODO check if there is a winner
 
         // update hit history
-        hitHistory = Field.fromBits(hitHistoryBits);
-        this.hitHistory.set(hitHistory);
+        // hitHistory = Field.fromBits(hitHistoryBits);
+        // this.hitHistory.set(hitHistory);
 
         // update the on-chain serialized target
         this.target.set(serializedTarget);
@@ -147,13 +185,18 @@ class Battleships extends SmartContract {
         // increment turn counter
         this.turns.set(turns.add(1));
     }
-
+    
     @method finalizeGame() { return }
 }
 
+// Add merkle map for both shot and hit -> mapped together
+// Add storage variable for hit1, hit2 and track winner --> emit event
+
 //TODO Add winner check
-//TODO Complete game architecture
-//TODO Add player client class
+//TODO Add merkle storage for target record 
+//TODO - Complete game architecture
+//TODO - Tests attack method 
+//TODO - Add player client class
 //TODO Reset game when finished
 
 //TODO? Emit event following game actions
@@ -161,3 +204,6 @@ class Battleships extends SmartContract {
 //? 1. Save adversary encrypted boards on-chain 
 //? 2. encryption privateKey should only be knwon to the zkapp itself
 //? 3. the key can be set after two players join 
+
+
+// the order is very import for the index of the merkle treee

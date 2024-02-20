@@ -139,6 +139,13 @@ class AttackUtils {
         return [targetX, targetY];
     }
 
+    static validateTarget(serializedTarget: Field) { 
+        // validate that the target is in the game map range
+        const target = AttackUtils.deserializeTarget(serializedTarget);
+        target[0].assertLessThan(10, 'Target x coordinate is out of bound!');
+        target[1].assertLessThan(10, 'Target y coordinate is out of bound!');
+    }
+
     static parseTarget(target: number[]) {
         return target.map(Field);
     }
