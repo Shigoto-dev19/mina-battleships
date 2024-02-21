@@ -1,4 +1,8 @@
-import { Battleships, TargetMerkleWitness } from './Battleships';
+import { 
+  Battleships, 
+  TargetMerkleWitness,
+  EMPTY_TREE8_ROOT,
+} from './Battleships';
 import {
   Field, 
   Mina,
@@ -83,11 +87,13 @@ describe('Battleships Game Tests', () => {
         expect(turns). toEqual(new UInt8(0));
 
         const targetRoot = zkapp.targetRoot.get();
-        expect(targetRoot).toEqual(Field(14472842460125086645444909368571209079194991627904749620726822601198914470820n));
-
+        expect(targetRoot).toEqual(EMPTY_TREE8_ROOT);
         
-        // const hitHistory = zkapp.hitHistory.get();
-        // expect(hitHistory).toEqual(Field(0));
+        const hitRoot = zkapp.hitRoot.get();
+        expect(hitRoot).toEqual(EMPTY_TREE8_ROOT);
+
+        const serializedHitHistory = zkapp.serializedHitHistory.get();
+        expect(serializedHitHistory).toEqual(Field(0));
       });
     });
 
@@ -281,7 +287,7 @@ describe('Battleships Game Tests', () => {
         expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
       });
 
-      it('should reject an non-compliant target off-chain tree: empty leaf/ false index', async () => {
+      it('should reject a non-compliant target off-chain tree: empty leaf/ false index', async () => {
         const hostBoard = [
           [0, 0, 0],
           [0, 1, 0],
@@ -310,7 +316,7 @@ describe('Battleships Game Tests', () => {
         expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
       });
 
-      it.skip('should reject an non-compliant target off-chain tree: full leaf / correct index', async () => {
+      it.skip('should reject a non-compliant target off-chain tree: full leaf / correct index', async () => {
         const hostBoard = [
           [0, 0, 0],
           [0, 1, 0],
@@ -340,7 +346,7 @@ describe('Battleships Game Tests', () => {
         expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
       });
 
-      it('should reject an non-compliant target off-chain tree: tampered tree', async () => {
+      it('should reject a non-compliant target off-chain tree: compromised tree', async () => {
         const hostBoard = [
           [0, 0, 0],
           [0, 1, 0],

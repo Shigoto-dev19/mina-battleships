@@ -22,7 +22,10 @@ export {
     Battleships,
     TargetMerkleWitness,
     HitMerkleWitness, 
+    EMPTY_TREE8_ROOT,
 }
+
+const EMPTY_TREE8_ROOT = Field(14472842460125086645444909368571209079194991627904749620726822601198914470820n);
 
 class TargetMerkleWitness extends MerkleWitness(8) {}
 class HitMerkleWitness extends MerkleWitness(8) {}
@@ -35,6 +38,7 @@ class Battleships extends SmartContract {
     @state(Field) targetRoot = State<Field>();
     @state(Bool) hitResult = State<Bool>();
     @state(Field) hitRoot = State<Field>();
+    @state(Field) serializedHitHistory = State<Field>();
 
     @method initGame() { 
         super.init();
@@ -42,14 +46,10 @@ class Battleships extends SmartContract {
         this.player1Id.set(Field(0));
         this.player2Id.set(Field(0));
         this.turns.set(UInt8.from(0));
-
-        const EMPTY_TREE8_ROOT = Field(14472842460125086645444909368571209079194991627904749620726822601198914470820n);
-
-        // set target commitment as the root of an empty Merkle Tree of size 256
-        this.targetRoot.set(Field(EMPTY_TREE8_ROOT));
         
-        // set hit commitment as the root of an empty Merkle Tree of size 256
+        this.targetRoot.set(Field(EMPTY_TREE8_ROOT));        
         this.hitRoot.set(EMPTY_TREE8_ROOT);
+        this.serializedHitHistory.set(Field(0));
     }
 
     @method hostGame(serializedBoard1: Field) {
@@ -88,6 +88,10 @@ class Battleships extends SmartContract {
         this.player2Id.set(joinerId);
     }
 
+    /**
+     * @notice proof verification is inherently reactive
+     *         first target must be made to kick off the cycle
+     */
     @method firstTurn(serializedTarget: Field, serializedBoard: Field, targetWitness: TargetMerkleWitness) {
         // fetch the on-chain turn counter and verify that it is the first turn
         const turns = this.turns.getAndRequireEquals();
@@ -118,8 +122,8 @@ class Battleships extends SmartContract {
             --> a witness of an empty leaf(before update) maintains the same root(commitiment)
         */ 
         let currentTargetRoot = targetWitness.calculateRoot(Field(0));
-
-        this.targetRoot.getAndRequireEquals().assertEquals(currentTargetRoot, 'Off-chain target merkle tree is out of sync!');
+        let storedTargetRoot = this.targetRoot.getAndRequireEquals();
+        storedTargetRoot.assertEquals(currentTargetRoot, 'Off-chain target merkle tree is out of sync!');
 
         // calculate the new merkle root following the updated target root
         let updatedTargetRoot = targetWitness.calculateRoot(serializedTarget);
@@ -148,14 +152,32 @@ class Battleships extends SmartContract {
             player1Id,
             player2Id,
         );
+
+        // assert root index compliance with the turn counter
+        const targetWitnessIndex = targetWitness.calculateIndex(); 
+        targetWitnessIndex.assertEquals(turns.value, "Target storage index is not compliant with turn counter!");
         
+        // assert hit witness index is in sync with the target merkle tree
+        const hitWitnessIndex = hitWitness.calculateIndex();
+        hitWitnessIndex.assertEquals(targetWitnessIndex.sub(1), "Hit storage index is not in sync with the target Merkle Tree");
+
+        // validate target merkle root
+        let currentTargetRoot = targetWitness.calculateRoot(Field(0));
+        let storedTargetRoot = this.targetRoot.getAndRequireEquals();
+        storedTargetRoot.assertEquals(currentTargetRoot, 'Off-chain target merkle tree is out of sync!');
+        
+        // validate hit merkle root
+        let currentHitRoot = hitWitness.calculateRoot(Field(0));
+        let storedHitRoot = this.hitRoot.getAndRequireEquals();
+        storedHitRoot.assertEquals(currentHitRoot, 'Off-chain hit merkle tree is out of sync!');
+
         // deserialize board, also referred as ships
         let deserializedBoard = BoardUtils.deserialize(serializedBoard);
         
         // assert that the current player should be the sender
         let senderBoardHash = BoardUtils.hash(deserializedBoard);
         let senderId = Poseidon.hash([senderBoardHash, ...this.sender.toFields()]);
-        senderId.assertEquals(currentPlayerId, "You are not allowed to attack!");
+        senderId.assertEquals(currentPlayerId, "You are not allowed to attack! Please wait for your adversary to take action!");
 
         /**
          * 1. Fetch adversary's serialized target from previous turn.
@@ -164,22 +186,42 @@ class Battleships extends SmartContract {
          */ 
         let adversarySerializedTarget = this.target.getAndRequireEquals();
         let adversaryTarget = AttackUtils.deserializeTarget(adversarySerializedTarget);
-        let hitResult = AttackCircuit.attack(deserializedBoard, adversaryTarget);
+        let adversaryHitResult = AttackCircuit.attack(deserializedBoard, adversaryTarget);
         
-        //TODO field size storage doesn't change 
-        // let hitHistory = this.hitHistory.getAndRequireEquals();
-        //! toNumber() => not provable
-        
-        // let hitHistoryBits = hitHistory.toBits(turns.toNumber());
-        // hitHistoryBits[turns.toNumber()] = hitResult;
-        
-        //TODO check if there is a winner
+        // fetch and deserialize the on-chain hitHistory
+        const serializedHitHistory = this.serializedHitHistory.getAndRequireEquals();
+        const [player1HitCount, player2HitCount] = AttackUtils.deserializeHitHistory(serializedHitHistory);
 
-        // update hit history
-        // hitHistory = Field.fromBits(hitHistoryBits);
-        // this.hitHistory.set(hitHistory);
+        // check if there is a winner
+        const isOver = Provable.if(
+            turns.value.isEven(),
+            player2HitCount.add(adversaryHitResult.toField()).equals(17),
+            player1HitCount.add(adversaryHitResult.toField()).equals(17),
+        );
+        
+        //TODO Emit winner event
+        // block game progress if there is a winner
+        isOver.assertFalse(`Game is over`);
 
-        // update the on-chain serialized target
+        // update the on-chain hit result
+        this.hitResult.set(adversaryHitResult);
+
+        // update hit Merkle Tree root
+        let updatedHitRoot = hitWitness.calculateRoot(adversaryHitResult.toField());
+        this.hitRoot.set(updatedHitRoot);
+        
+        // update hit history & serialize
+        let updatedSerializedHitHistory = Provable.if(
+            turns.value.isEven(), 
+            AttackUtils.serializeHitHistory([player1HitCount, player2HitCount.add(adversaryHitResult.toField())]),
+            AttackUtils.serializeHitHistory([player1HitCount.add(adversaryHitResult.toField()), player2HitCount]),
+        );
+
+        // update the on-chain hitHistory
+        this.serializedHitHistory.set(updatedSerializedHitHistory);
+        
+        // validate & update the on-chain serialized target
+        AttackUtils.validateTarget(serializedTarget);
         this.target.set(serializedTarget);
 
         // increment turn counter
@@ -189,21 +231,13 @@ class Battleships extends SmartContract {
     @method finalizeGame() { return }
 }
 
-// Add merkle map for both shot and hit -> mapped together
-// Add storage variable for hit1, hit2 and track winner --> emit event
-
-//TODO Add winner check
-//TODO Add merkle storage for target record 
-//TODO - Complete game architecture
-//TODO - Tests attack method 
+//TODO Test attack method 
+//TODO - Simulate game in tests
 //TODO - Add player client class
-//TODO Reset game when finished
+//TODO Reset game when finished(keep state transition in mind)
 
 //TODO? Emit event following game actions
 
 //? 1. Save adversary encrypted boards on-chain 
 //? 2. encryption privateKey should only be knwon to the zkapp itself
 //? 3. the key can be set after two players join 
-
-
-// the order is very import for the index of the merkle treee

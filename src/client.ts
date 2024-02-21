@@ -149,6 +149,23 @@ class AttackUtils {
     static parseTarget(target: number[]) {
         return target.map(Field);
     }
+
+    static serializeHitHistory(hitHistory: Field[]) { 
+        const [player1HitCount, player2HitCount] = hitHistory;
+        const player1HitCountBits = player1HitCount.toBits(5);
+        const player2HitCountBits = player2HitCount.toBits(5);
+        const serializedHitHistory = Field.fromBits([...player1HitCountBits, ...player2HitCountBits]);
+
+        return serializedHitHistory
+    }
+
+    static deserializeHitHistory(serializedHitHistory: Field) { 
+        const bits = serializedHitHistory.toBits(10);
+        const player1HitCount = Field.fromBits(bits.slice(0, 5));
+        const player2HitCount = Field.fromBits(bits.slice(5, 10));
+
+        return [player1HitCount, player2HitCount];
+    }
 }
 class AttackCircuit {
     /*
