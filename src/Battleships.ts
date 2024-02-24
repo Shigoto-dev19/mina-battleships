@@ -224,6 +224,12 @@ class Battleships extends SmartContract {
         AttackUtils.validateTarget(serializedTarget);
         this.target.set(serializedTarget);
 
+        // calculate target Merkle Tree root
+        let updatedTargetRoot = targetWitness.calculateRoot(serializedTarget);
+
+        // update the on-chain target Merkle Tree root on-chain
+        this.targetRoot.set(updatedTargetRoot);
+
         // increment turn counter
         this.turns.set(turns.add(1));
     }
