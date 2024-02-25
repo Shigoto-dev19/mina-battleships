@@ -153,6 +153,14 @@ class Battleships extends SmartContract {
             player2Id,
         );
 
+        // deserialize board, also referred as ships
+        let deserializedBoard = BoardUtils.deserialize(serializedBoard);
+
+        // assert that the current player should be the sender
+        let senderBoardHash = BoardUtils.hash(deserializedBoard);
+        let senderId = Poseidon.hash([senderBoardHash, ...this.sender.toFields()]);
+        senderId.assertEquals(currentPlayerId, "You are not allowed to attack! Please wait for your adversary to take action!");
+
         // assert root index compliance with the turn counter
         const targetWitnessIndex = targetWitness.calculateIndex(); 
         targetWitnessIndex.assertEquals(turns.value, "Target storage index is not compliant with turn counter!");
@@ -170,14 +178,6 @@ class Battleships extends SmartContract {
         let currentHitRoot = hitWitness.calculateRoot(Field(0));
         let storedHitRoot = this.hitRoot.getAndRequireEquals();
         storedHitRoot.assertEquals(currentHitRoot, 'Off-chain hit merkle tree is out of sync!');
-
-        // deserialize board, also referred as ships
-        let deserializedBoard = BoardUtils.deserialize(serializedBoard);
-        
-        // assert that the current player should be the sender
-        let senderBoardHash = BoardUtils.hash(deserializedBoard);
-        let senderId = Poseidon.hash([senderBoardHash, ...this.sender.toFields()]);
-        senderId.assertEquals(currentPlayerId, "You are not allowed to attack! Please wait for your adversary to take action!");
 
         /**
          * 1. Fetch adversary's serialized target from previous turn.
@@ -241,6 +241,7 @@ class Battleships extends SmartContract {
 //TODO - Simulate game in tests
 //TODO - Add player client class
 //TODO Reset game when finished(keep state transition in mind)
+//TODO Add nullifer for target to prevent player for attacking the same target more than once 
 
 //TODO? Emit event following game actions
 

@@ -51,7 +51,8 @@ describe('Battleships Game Tests', () => {
     targetTree: MerkleTree,
     hitTree: MerkleTree,
     hostBoard: number[][],
-    joinerBoard: number[][];
+    joinerBoard: number[][],
+    intruderBoard: number[][];
     
     beforeAll(async () => {
       if (proofsEnabled) await Battleships.compile();
@@ -90,7 +91,15 @@ describe('Battleships Game Tests', () => {
         [6, 8, 0],
         [7, 7, 0],
       ];
-      
+
+      // set up a local intruder board for testing purposes
+      intruderBoard = [
+        [3, 2, 0],
+        [8, 4, 1],
+        [7, 0, 0],
+        [0, 9, 0],
+        [8, 8, 0],
+      ];
     });
 
     describe('Deploy and initialize Battleships zkApp', () => {
@@ -123,7 +132,28 @@ describe('Battleships Game Tests', () => {
     });
 
     describe('hostGame method tests', () => {
-      it.todo('should reject host invalid board');
+      // We test only one invalid case because board correctness is tested separately
+      it('should reject host with invalid board', () => {
+        const invalidHostBoard = [
+          [9, 0, 1],
+          [9, 5, 1],
+          [6, 9, 0],
+          [6, 8, 0],
+          [10, 7, 0],
+        ];
+        
+        const invalidSerializedBoard = BoardUtils.serialize(invalidHostBoard);
+        const rejectedHostTX = async () => {
+          let hostGameTx = await Mina.transaction(hostKey.toPublicKey(), () => {
+            zkapp.hostGame(invalidSerializedBoard);
+          });
+
+          await hostGameTx.prove();
+          await hostGameTx.sign([hostKey]).send();
+        }
+
+        expect(rejectedHostTX).rejects.toThrowError('Ship5 is out of board range!');
+      });
 
       it('should host a game and update player1Id', async () => {   
         const hostSerializedBoard = BoardUtils.serialize(hostBoard);
@@ -144,15 +174,7 @@ describe('Battleships Game Tests', () => {
         expect(computedHostId).toEqual(hostId);
       });
 
-      it('should prevent other players to re-host a game', async () => {
-        const intruderBoard = [
-          [9, 0, 1],
-          [9, 5, 1],
-          [6, 9, 0],
-          [6, 8, 0],
-          [7, 7, 0],
-        ];
-        
+      it('should prevent other players to re-host a game', async () => {   
         const intruderSerializedBoard = BoardUtils.serialize(intruderBoard);
         const intruderHostTX = async () => {
           let hostGameTx = await Mina.transaction(joinerKey.toPublicKey(), () => {
@@ -168,7 +190,27 @@ describe('Battleships Game Tests', () => {
     });
 
     describe('joinGame method tests', () => {
-      it.todo('should reject a joiner with invalid board');
+      it('should reject a joiner with invalid board', () => {
+        const invalidJoinerBoard = [
+          [9, 0, 2],
+          [9, 5, 1],
+          [6, 9, 0],
+          [6, 8, 0],
+          [7, 7, 0],
+        ];
+        
+        const invalidSerializedBoard = BoardUtils.serialize(invalidJoinerBoard);
+        const rejectedJoinTX = async () => {
+          let joinGameTx = await Mina.transaction(joinerKey.toPublicKey(), () => {
+            zkapp.joinGame(invalidSerializedBoard);
+          });
+
+          await joinGameTx.prove();
+          await joinGameTx.sign([joinerKey]).send();
+        }
+        
+        expect(rejectedJoinTX).rejects.toThrowError('Coordinate z should be 1 or 0!');
+      });
 
       it('should join a game and update player2Id', async () => {
         const joinerSerializedBoard = BoardUtils.serialize(joinerBoard);
@@ -190,17 +232,9 @@ describe('Battleships Game Tests', () => {
       });
 
       it('should prevent other players to join a full game', async () => {
-        const intruderBoard = [
-          [9, 0, 1],
-          [9, 5, 1],
-          [6, 9, 0],
-          [6, 8, 0],
-          [7, 7, 0],
-        ];
-        
         const intruderSerializedBoard = BoardUtils.serialize(intruderBoard);
         const intruderJoinTX = async () => {
-          let joinGameTx = await Mina.transaction(hostKey.toPublicKey(), () => {
+          let joinGameTx = await Mina.transaction(intruderKey.toPublicKey(), () => {
             zkapp.joinGame(intruderSerializedBoard);
           });
 
@@ -233,7 +267,11 @@ describe('Battleships Game Tests', () => {
         expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
       }
 
-      it.todo('should reject a host with non-compliant board');
+      it('should reject a host with non-compliant board', async () => {
+        const errorMessage = 'Only the host is allowed to play the opening shot!';
+        // tamper with the host board --> use the intruder board instead --> break integrity
+        testInvalidFirstTurn(hostKey, intruderBoard, [1, 2], errorMessage);
+      });
 
       it('should reject any caller other than the host', async () => {
         const errorMessage = 'Only the host is allowed to play the opening shot!';
@@ -266,6 +304,30 @@ describe('Battleships Game Tests', () => {
         targetTree.setLeaf(12n, Field(0));
       });
 
+      it('should reject calling attack method before firstTurn', async () => {
+        let index = 0n;
+        let wTarget = targetTree.getWitness(index);
+        let targetWitness = new TargetMerkleWitness(wTarget);
+
+        let hTarget = hitTree.getWitness(index);
+        let hitWitness = new HitMerkleWitness(hTarget);
+
+        const serializedBoard = BoardUtils.serialize(hostBoard);
+        const serializedTarget = AttackUtils.serializeTarget([1, 2]);
+
+        const rejectedAttackTx = async () => {
+          let attackTx = await Mina.transaction(hostKey.toPublicKey(), () => {
+            zkapp.attack(serializedTarget, serializedBoard, targetWitness, hitWitness);
+          });
+
+          await attackTx.prove();
+          await attackTx.sign([hostKey]).send();
+        }
+
+        const errorMessage = 'Please wait for the host to play the opening shot first!';
+        expect(rejectedAttackTx).rejects.toThrowError(errorMessage);
+      });
+
       it('should accept a valid TX and update target on-chain', async () => {
         let index = zkapp.turns.get();
         let w = targetTree.getWitness(index.toBigInt());
@@ -291,7 +353,7 @@ describe('Battleships Game Tests', () => {
         targetTree.setLeaf(index.toBigInt(), storedTarget); 
       });
 
-      it('should reject calling the method more than once', async () => {
+      it('should reject calling firstTurn method more than once', async () => {
         let index = zkapp.turns.get();
         let w = targetTree.getWitness(index.toBigInt());
         let targetWitness = new TargetMerkleWitness(w);
@@ -311,12 +373,10 @@ describe('Battleships Game Tests', () => {
         const errorMessage = 'Opening attack can only be played at the beginning of the game!';
         expect(rejectedFirstTurnTx).rejects.toThrowError(errorMessage);
       });
-      
-      it.todo('should reject calling attack method before firstTurn');
     });
 
     describe('attack method tests', () => {
-      async function testInvalidAttack(playerKey: PrivateKey, board: number[][], errorMessage: string, falseTargetIndex=false, falseHitIndex=false) {
+      async function testInvalidAttack(playerKey: PrivateKey, board: number[][], errorMessage: string, falseTargetIndex=false, falseHitIndex=false, target?: number[]) {
         let index = zkapp.turns.get().toBigInt();
         let wTarget = targetTree.getWitness(falseTargetIndex ? index + 1n : index);
         let targetWitness = new TargetMerkleWitness(wTarget);
@@ -325,7 +385,7 @@ describe('Battleships Game Tests', () => {
         let hitWitness = new HitMerkleWitness(hTarget);
 
         const serializedBoard = BoardUtils.serialize(board);
-        const serializedTarget = AttackUtils.serializeTarget([1, 2]);
+        const serializedTarget = AttackUtils.serializeTarget(target ?? [1, 2]);
 
         const rejectedAttackTx = async () => {
           let attackTx = await Mina.transaction(playerKey.toPublicKey(), () => {
@@ -384,8 +444,15 @@ describe('Battleships Game Tests', () => {
         expect(zkapp.turns.get().toBigInt()).toEqual(index + 1n); 
       }
 
-      it.todo('should reject eligible player with non-compliant board: host');
-      it.todo('should reject eligible player with non-compliant board: joiner');
+      it('should reject an invalid target: x coordinate', async () => {
+        const errorMessage = 'Target x coordinate is out of bound!';
+        testInvalidAttack(joinerKey, joinerBoard, errorMessage, false, false, [12, 5]);
+      });
+
+      it('should reject an invalid target: y coordinate', async () => {
+        const errorMessage = 'Target y coordinate is out of bound!';
+        testInvalidAttack(joinerKey, joinerBoard, errorMessage, false, false, [4, 13]);
+      });
 
       it('should reject an eligible player from taking a turn out of sequence', async () => {
         const errorMessage = 'You are not allowed to attack! Please wait for your adversary to take action!';
@@ -429,9 +496,21 @@ describe('Battleships Game Tests', () => {
         hitTree.setLeaf(3n, Field(0));
       });
 
+      it('should reject eligible player with non-compliant board: joiner', async () => {
+        const errorMessage = 'You are not allowed to attack! Please wait for your adversary to take action!';
+        // use intruder board instead to break integrity compliance
+        await testInvalidAttack(joinerKey, intruderBoard, errorMessage);
+      });
+
       // player2 turn --> turn = 1
       it('should accept a valid attack TX and update state on-chain: 1st check', async () => {
         await testValidAttack(joinerKey, joinerBoard, [0, 0], false, [0, 0]);
+      });
+
+      it('should reject eligible player with non-compliant board: host', async () => {
+        const errorMessage = 'You are not allowed to attack! Please wait for your adversary to take action!';
+        // use intruder board instead to break integrity compliance
+        await testInvalidAttack(hostKey, intruderBoard, errorMessage);
       });
 
       // player1 turn --> turn = 2

@@ -62,6 +62,8 @@ class BoardUtils {
         return Poseidon.hash([boardHash, ...playerAddress.toFields()]);
     }
 }
+
+//TODO: Add "invalid board" message inside assertion logs
 class BoardCircuit { 
     static validateShipInRange(ship: Field[], shipLength: number, errorMessage: string) { 
         // horizontal check: z=ship[2]=0 
@@ -79,6 +81,7 @@ class BoardCircuit {
         }
 
         // verify z is binary
+        //TODO infer which adding another argument for zErrorMessage 
         ship[2].assertLessThanOrEqual(1, 'Coordinate z should be 1 or 0!');
 
         const isInRange = Provable.if(ship[2].equals(1), checkVertical(), checkHorizontal());
