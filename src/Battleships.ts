@@ -188,6 +188,7 @@ class Battleships extends SmartContract {
         let adversaryTarget = AttackUtils.deserializeTarget(adversarySerializedTarget);
         let adversaryHitResult = AttackCircuit.attack(deserializedBoard, adversaryTarget);
         
+        //TODO check if game is over: at the beginning 
         // fetch and deserialize the on-chain hitHistory
         const serializedHitHistory = this.serializedHitHistory.getAndRequireEquals();
         const [player1HitCount, player2HitCount] = AttackUtils.deserializeHitHistory(serializedHitHistory);
@@ -248,3 +249,9 @@ class Battleships extends SmartContract {
 //? 1. Save adversary encrypted boards on-chain 
 //? 2. encryption privateKey should only be knwon to the zkapp itself
 //? 3. the key can be set after two players join 
+
+//TODO in the target serialized --> proivde bits to store hit target --> we need to prevent a player from hitting the same target and keep claiming hits?
+//TODO --> the good thing we will only prevent the player from hitting hit target and the missed ones won't affect the game
+//TODO --> better than nullifier semantics 
+
+                                

@@ -16,6 +16,11 @@ import {
 } from 'o1js';
 import { AttackUtils, BoardUtils } from './client';
 
+export { 
+  localDeploy,
+  initializeGame,
+}
+
 const proofsEnabled = false;
 
 async function localDeploy(zkapp: Battleships, deployerKey: PrivateKey, zkappPrivateKey: PrivateKey) { 
