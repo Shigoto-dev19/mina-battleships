@@ -132,7 +132,7 @@ describe('Board Tests', () => {
                 [0, 1, 1],
                 [4, 3, 0],
                 [5, 5, 0],
-                [3, 5, 0],
+                [6, 5, 1],
                 [1, 7, 1],
             ];
             testCollision(ships3, 'Collision occured when placing Ship4!');

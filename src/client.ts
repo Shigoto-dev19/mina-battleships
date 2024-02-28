@@ -11,15 +11,15 @@ import {
 } from 'o1js';
 import {
     parseGameBoard,
-    nestifyArray,
+    generateEmptyGameGrid,
     stringifyBoard,
     printBoard,
-} from './game'
+} from './game.js'
 import { 
     Battleships,
      HitMerkleWitness, 
      TargetMerkleWitness 
-} from './Battleships';
+} from './Battleships.js';
 
 export { 
     BoardUtils, 
@@ -83,7 +83,7 @@ class BoardCircuit {
     static validateShipInRange(ship: Field[], shipLength: number, errorMessage: string) { 
         // horizontal check: z=ship[2]=0 
         const checkHorizontal = () => {
-            const hCheck = ship[0].add(shipLength).lessThan(10);
+            const hCheck = ship[0].add(shipLength - 1).lessThan(10);
             const vCheck = ship[1].lessThan(10);
             return hCheck.and(vCheck)
         }
@@ -91,7 +91,7 @@ class BoardCircuit {
         // vertical check: z=ship[2]=1
         const checkVertical = () => { 
             const hCheck = ship[0].lessThan(10);
-            const vCheck = ship[1].add(shipLength).lessThan(10);
+            const vCheck = ship[1].add(shipLength - 1).lessThan(10);
             return hCheck.and(vCheck)
         }
 
@@ -104,15 +104,17 @@ class BoardCircuit {
     }
 
     static placeShip(ship: Field[], shipLength: number, boardMap: Field[], errorMessage: string) { 
-        const increment = Provable.if(ship[2].equals(1), Field(10), Field(0));
+        const increment = Provable.if(ship[2].equals(1), Field(10), Field(1));
         let index = ship[0].add(ship[1].mul(10));
+        let coordinate = index;
         for(let i=0; i<shipLength; i++) {
-            let coordinate = index.add(i).add(increment);
+            if (i === 0) coordinate;
+            else coordinate = index.add(Field(i).mul(increment));
             let check = Provable.witness(Bool, () => {
                 let collisionExists = boardMap.some(item => item.equals(coordinate).toBoolean());
                 return Bool(collisionExists)
             });
-            check.assertFalse(errorMessage);
+            check.assertFalse(errorMessage); 
             boardMap.push(coordinate);
         }
         return boardMap
@@ -289,7 +291,7 @@ class BattleShipsClient {
         this.hitTree = new MerkleTree(8);
 
         this.playerGridDisplay = parseGameBoard(this.board);
-        this.adversaryGridDisplay = nestifyArray(new Array(100).fill(' '));
+        this.adversaryGridDisplay = generateEmptyGameGrid();
 
         this.playerHits = [];
 
@@ -368,7 +370,7 @@ class BattleShipsClient {
             this.playerHits.push(parsedPreviousHitResult);
 
             // fetch the previous player's target to point it with hit Result on the enemy grid
-            let previousTarget = this.playerTargets[Number(index) - 2];
+            let previousTarget = this.playerTargets[this.playerTargets.length - 1];
 
             if (parsedPreviousHitResult === 1) {
                 this.playerHitCount++; 
@@ -418,7 +420,6 @@ class BattleShipsClient {
             this.playerGridDisplay[adversaryTarget[1]][adversaryTarget[0]] = '\x1b[31mH\x1b[0m';
         } else  this.playerGridDisplay[adversaryTarget[1]][adversaryTarget[0]] = '\x1b[32mM\x1b[0m';
 
-
         this.winner = this.adversaryHitCount == 17; 
     }
 
@@ -441,8 +442,6 @@ class BattleShipsClient {
             return result        
         }
 
-        // call data from the game state on-chain
-
         let turnCount = this.zkapp.turns.get().toNumber();
         let hitHistory = AttackUtils.deserializeHitHistory(this.zkapp.serializedHitHistory.get()).map(f => Number(f.toBigInt()));
 
@@ -458,8 +457,6 @@ class BattleShipsClient {
         let board2 = stringifyBoard(this.adversaryGridDisplay);
         printBoard(board1, board2);
         
-        // print plaintext data according to player's turn index
-
         if (this.playerId.toBigInt() === hostId) {
             console.log('\x1b[35m%s\x1b[0m','\nPlayer1 is the host!');
             console.log('\x1b[36m%s\x1b[0m','Turn number: ', turnCount);
@@ -468,10 +465,9 @@ class BattleShipsClient {
             console.log('\x1b[36m%s\x1b[0m','Sucessful hits: ', this.playerHitCount);
             
             console.log('\x1b[36m%s\x1b[0m','Targeted shots: ');
-            console.log(`Opening Shot #1 --> [${this.playerTargets[0]}] --> ${printHit(this.playerHits[0], this.playerId, winnerId!)}`);
+            console.log(`Opening Target #1 --> [${this.playerTargets[0]}] --> ${printHit(this.playerHits[0], this.playerId, winnerId!)}`);
             for(let turn=1; turn< this.playerTargets.length; turn++) {
-                
-                console.log(`  Shot #${turn} --> [${this.playerTargets[turn]}] --> ${printHit(this.playerHits[turn], this.playerId, winnerId!)}`)
+                console.log(`  Target #${turn+1} --> [${this.playerTargets[turn]}] --> ${printHit(this.playerHits[turn], this.playerId, winnerId!)}`)
             }
             
             if (this.winner) 
@@ -491,7 +487,7 @@ class BattleShipsClient {
             console.log('\x1b[36m%s\x1b[0m','Targeted shots: ');
             for(let turn=0; turn< this.playerTargets.length; turn++) {
                 
-                console.log(`  Shot #${turn+1} --> [${this.playerTargets[turn]}] --> ${printHit(this.playerHits[turn], this.playerId, winnerId!)}`)
+                console.log(`  Target #${turn+1} --> [${this.playerTargets[turn]}] --> ${printHit(this.playerHits[turn], this.playerId, winnerId!)}`)
             }    
             if (this.winner) 
             console.log('\x1b[36m%s\x1b[0m','Winner: ', 'Player1');
