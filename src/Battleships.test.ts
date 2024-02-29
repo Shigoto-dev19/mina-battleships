@@ -14,12 +14,7 @@ import {
   MerkleTree,
   Bool,
 } from 'o1js';
-import { AttackUtils, BoardUtils } from './client';
-
-export { 
-  localDeploy,
-  initializeGame,
-}
+import { AttackUtils, BoardUtils } from './provableUtils';
 
 const proofsEnabled = false;
 
@@ -340,7 +335,8 @@ describe('Battleships Game Tests', () => {
 
         const serializedBoard = BoardUtils.serialize(hostBoard);
         const serializedTarget = AttackUtils.serializeTarget([3, 4]);
-
+        console.log("serializedTarget: ", serializedTarget.toBigInt());
+        console.log('deserialized target: ', AttackUtils.deserializeTarget(serializedTarget).map(f => f.toBigInt()));
         let firstTurnTx = await Mina.transaction(hostKey.toPublicKey(), () => {
           zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
         });
@@ -404,7 +400,7 @@ describe('Battleships Game Tests', () => {
         expect(rejectedAttackTx).rejects.toThrowError(errorMessage);
       } 
 
-      async function testValidAttack(playerKey: PrivateKey, board: number[][], shot: number[], expectedHitResult: boolean, expectedHitHistory: number[]) { 
+      async function testValidAttack(playerKey: PrivateKey, board: number[][], target: number[], expectedHitResult: boolean, expectedHitHistory: number[]) { 
         let index = zkapp.turns.get().toBigInt();
         let wTarget = targetTree.getWitness(index);
         let targetWitness = new TargetMerkleWitness(wTarget);
@@ -413,7 +409,7 @@ describe('Battleships Game Tests', () => {
         let hitWitness = new HitMerkleWitness(hTarget);
 
         const serializedBoard = BoardUtils.serialize(board);
-        const serializedTarget = AttackUtils.serializeTarget(shot);
+        const serializedTarget = AttackUtils.serializeTarget(target);
 
         let attackTx = await Mina.transaction(playerKey.toPublicKey(), () => {
           zkapp.attack(serializedTarget, serializedBoard, targetWitness, hitWitness);
@@ -442,7 +438,7 @@ describe('Battleships Game Tests', () => {
 
         // fetch the updated serializedHitHistory on-chain 
         const serializedHitHistory = zkapp.serializedHitHistory.get();
-        const hitHistory = AttackUtils.deserializeHitHistory(serializedHitHistory);
+        const hitHistory = AttackUtils.deserializeHitHistory(serializedHitHistory)[0];
         expect(hitHistory).toEqual(expectedHitHistory.map(Field));
 
         // fetch & assert the updated turn counter on-chain 
@@ -507,7 +503,7 @@ describe('Battleships Game Tests', () => {
         await testInvalidAttack(joinerKey, intruderBoard, errorMessage);
       });
 
-      // player2 turn --> turn = 1
+      // player2 turn --> turn = 1 --> report Player1 Miss
       it('should accept a valid attack TX and update state on-chain: 1st check', async () => {
         await testValidAttack(joinerKey, joinerBoard, [0, 0], false, [0, 0]);
       });
@@ -518,21 +514,45 @@ describe('Battleships Game Tests', () => {
         await testInvalidAttack(hostKey, intruderBoard, errorMessage);
       });
 
-      // player1 turn --> turn = 2
+      // player1 turn --> turn = 2 --> report player2 Hit
       it('should accept a valid attack TX and update state on-chain: 2nd check', async () => {
         await testValidAttack(hostKey, hostBoard, [6, 8], true, [0, 1]);
       });
 
-      // player2 turn --> turn = 3
+      it('should reject player2 selecting a nullified target that caused a hit', async () => {
+        const errorMessage = 'Invalid Target! Please select a unique target!' 
+        await testInvalidAttack(joinerKey, joinerBoard, errorMessage, false, false, [0, 0]);
+      });
+
+      // player2 turn --> turn = 3 -->  report player1 Hit
       it('should accept a valid attack TX and update state on-chain: 3rd check', async () => {
         await testValidAttack(joinerKey, joinerBoard, [0, 1], true, [1, 1]);
       });
 
-      // player1 turn --> turn = 4
+      it('should reject player1 selecting a nullified target that caused a hit', async () => {
+        const errorMessage = 'Invalid Target! Please select a unique target!' 
+        await testInvalidAttack(hostKey, hostBoard, errorMessage, false, false, [6, 8]);
+      });
+
+      // player1 turn --> turn = 4 --> report player2 Hit
       it('should accept a valid attack TX and update state on-chain: 4th check', async () => {
         await testValidAttack(hostKey, hostBoard, [3, 7], true, [1, 2]);
       });
-    });      
-});
+      
+      // player2 turn --> turn = 5 --> report player1 Miss
+      it('should accept a valid attack TX and update state on-chain: 5th check', async () => {
+        await testValidAttack(joinerKey, joinerBoard, [9, 0], false, [1, 2]);
+      });
 
-//TODO: Redirect full game test in game.ts that simulated win/lose of one of the players
+      // player1 turn --> turn = 6 --> report player2 Miss
+      it('should accept player1 sending a valid attack TX choosing a previous target that was a MISS: 6th check', async () => {
+        await testValidAttack(hostKey, hostBoard, [3, 7], false, [1, 2]);
+      });
+
+      // player2 turn --> turn = 7 --> report player1 Miss
+      it('should accept player2 sending a valid attack TX choosing a previous target that was a MISS: 6th check', async () => {
+        await testValidAttack(joinerKey, joinerBoard, [9, 0], false, [1, 2]);
+      });
+    });      
+});  
+

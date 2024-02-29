@@ -139,6 +139,7 @@ class Battleships extends SmartContract {
         let turns = this.turns.getAndRequireEquals();
         turns.assertGreaterThan(0, "Please wait for the host to play the opening shot first!")
         
+        const isHost = turns.value.isEven();
         let player1Id = this.player1Id.getAndRequireEquals();
         let player2Id = this.player2Id.getAndRequireEquals();
 
@@ -148,7 +149,7 @@ class Battleships extends SmartContract {
          * - NOTE: The host(player1) has the privilege to attack first.
          */
         let currentPlayerId = Provable.if(
-            turns.value.isEven(), 
+            isHost, 
             player1Id,
             player2Id,
         );
@@ -213,31 +214,27 @@ class Battleships extends SmartContract {
         
         // update hit count history & serialize
         let updatedSerializedHitCountHistory = Provable.if(
-            turns.value.isEven(), 
+            isHost, 
             AttackUtils.serializeHitCountHistory([player1HitCount, player2HitCount.add(adversaryHitResult.toField())]),
             AttackUtils.serializeHitCountHistory([player1HitCount.add(adversaryHitResult.toField()), player2HitCount]),
         );
         
         const playerTarget = AttackUtils.deserializeTarget(serializedTarget);
-        let isNullifiedCheck = Provable.if(
-            turns.value.isEven(),
+        let isNullified = Provable.if(
+            isHost,
             AttackUtils.validateHitTargetUniqueness(playerTarget, player1HitTargets),
             AttackUtils.validateHitTargetUniqueness(playerTarget, player2HitTargets),
         );
 
-        isNullifiedCheck.assertFalse('Please select a unique target!')
+        isNullified.assertFalse('Invalid Target! Please select a unique target!')
 
         let updatedSerializedHitTargetHistory = Provable.if(
-            turns.value.isEven(),
+            isHost,
             AttackUtils.serializeHitTargetHistory([player1HitTargets, AttackUtils.updateHitTargetHistory(adversaryTarget, adversaryHitResult, player2HitTargets, player2HitCount)]),
             AttackUtils.serializeHitTargetHistory([AttackUtils.updateHitTargetHistory(adversaryTarget, adversaryHitResult, player1HitTargets, player1HitCount), player2HitTargets]),
         );
-        //TODO check target uniqueness -> ok!
-        //TODO update hitHistory -> ok!
-        //TODO update hit target -> ok!
-        //TODO should serialize the same target and add one 
-        //? update the on-chain hitHistory
         
+        // update the on-chain hit history
         const updatedSerializedHitHistory = AttackUtils.serializeHitHistory(updatedSerializedHitCountHistory, updatedSerializedHitTargetHistory);
         this.serializedHitHistory.set(updatedSerializedHitHistory);
         
@@ -259,18 +256,14 @@ class Battleships extends SmartContract {
 }
 
 //TODO Reset game when finished(keep state transition in mind)
-//TODO Add nullifer for target to prevent player for attacking the same target more than once 
 //TODO Add salt when generating player ID --> we want player to be able to reuse same board without generating the same ID  
 
 //TODO? Emit event following game actions
-
-//? 1. Save adversary encrypted boards on-chain 
-//? 2. encryption privateKey should only be knwon to the zkapp itself
-//? 3. the key can be set after two players join 
 
 //TODO in the target serialized --> proivde bits to store hit target --> we need to prevent a player from hitting the same target and keep claiming hits?
 //TODO --> the good thing we will only prevent the player from hitting hit target and the missed ones won't affect the game
 //TODO --> better than nullifier semantics 
 //TODO --> add one after serialized to distinguish value from initial value
 //TODO have a last check on zkapp error handling & messages
-//TODO have consistent serialization for target
+
+//players from hitting the same target multiple times
