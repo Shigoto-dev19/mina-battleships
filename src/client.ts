@@ -207,15 +207,15 @@ class BattleShipsClient {
     }
 
     displayPlayerGrids() {
-        const stringifedPlayerGameGrid = stringifyGameGrid(this.playerGridDisplay);
+        const stringifiedPlayerGameGrid = stringifyGameGrid(this.playerGridDisplay);
         const stringifiedAdversaryGameGrid = stringifyGameGrid(this.adversaryGridDisplay);
-        printPlayerAndAdversaryBoards(stringifedPlayerGameGrid, stringifiedAdversaryGameGrid);
+        printPlayerAndAdversaryBoards(stringifiedPlayerGameGrid, stringifiedAdversaryGameGrid);
     }
 
     displayPlayerStats() {
         const turnCount = this.zkapp.turns.get().toNumber();
         const serializedHitHistory = this.zkapp.serializedHitHistory.get();
-        const hitHistory = AttackUtils.deserializeHitHistory(serializedHitHistory).map(f => Number(f.toBigInt()));
+        const hitHistory = AttackUtils.deserializeHitHistory(serializedHitHistory)[0].map(f => Number(f.toBigInt()));
 
         
         const hostId = this.zkapp.player1Id.get().toBigInt();

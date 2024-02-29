@@ -1,5 +1,5 @@
 import { Field } from 'o1js';
-import { BoardCircuit, BoardUtils, AttackCircuit } from './client';
+import { BoardCircuit, BoardUtils, AttackCircuit } from './provableUtils';
 
 /*
 Each ship is an array [x, y, z] where 
@@ -16,6 +16,7 @@ describe('Board Tests', () => {
             
             const serializedBoard = BoardUtils.serialize(ships); 
             const validationHash = BoardCircuit.validateBoard(serializedBoard);
+
             expect(validationHash).toEqual(hash);
         }
 
@@ -59,6 +60,7 @@ describe('Board Tests', () => {
                 const serializedBoard = BoardUtils.serialize(ships); 
                 BoardCircuit.validateBoard(serializedBoard);
             }
+            
             expect(validationRangeError).toThrowError(errorMessage);
         }
 
@@ -99,10 +101,11 @@ describe('Board Tests', () => {
     describe("Collision Checks", () => {
         function testCollision(ships: number[][], errorMessage: string) { 
             const serializedBoard = BoardUtils.serialize(ships); 
-            const validationCollisionrror = () => {
+            const mockCollisionError = () => {
                 BoardCircuit.validateBoard(serializedBoard);
             }
-            expect(validationCollisionrror).toThrowError(errorMessage);
+            
+            expect(mockCollisionError).toThrowError(errorMessage);
         }
 
         it("Placement violation: board 1", () => {
@@ -113,7 +116,7 @@ describe('Board Tests', () => {
                 [0, 3, 0],
                 [0, 4, 0],
             ];
-            testCollision(ships1, 'Collision occured when placing Ship2!');
+            testCollision(ships1, 'Invalid Board! Collision occured when placing Ship2!');
         });
 
         it("Placement violation: board 2", () => {
@@ -124,7 +127,7 @@ describe('Board Tests', () => {
                 [5, 9, 0],
                 [1, 8, 1],
             ];
-            testCollision(ships2, 'Collision occured when placing Ship3!');
+            testCollision(ships2, 'Invalid Board! Collision occured when placing Ship3!');
         });
 
         it("Placement violation: board 3", () => {
@@ -135,7 +138,7 @@ describe('Board Tests', () => {
                 [6, 5, 1],
                 [1, 7, 1],
             ];
-            testCollision(ships3, 'Collision occured when placing Ship4!');
+            testCollision(ships3, 'Invalid Board! Collision occured when placing Ship4!');
         });
 
         it("Placement violation: board 4", () => {
@@ -146,7 +149,7 @@ describe('Board Tests', () => {
                 [6, 8, 0],
                 [7, 7, 1],
             ];
-            testCollision(ships4, 'Collision occured when placing Ship5!');
+            testCollision(ships4, 'Invalid Board! Collision occured when placing Ship5!');
         });
     });
 });
@@ -335,7 +338,7 @@ describe('Attack Tests', () => {
                 [0, 4, 0],
             ];
             const target1 = [-1, 3];
-            testOutOfBoundAttack(ships, target1, 'target x coordinate is out of bound!');
+            testOutOfBoundAttack(ships, target1, 'Target x coordinate is out of bound!');
            
         });
 
@@ -348,7 +351,7 @@ describe('Attack Tests', () => {
                 [0, 4, 0],
             ];
             const target2 = [10, 3];
-            testOutOfBoundAttack(ships, target2, 'target x coordinate is out of bound!');
+            testOutOfBoundAttack(ships, target2, 'Target x coordinate is out of bound!');
         });
 
         it("Shot range violation turn 3: y out of bounds", () => {
@@ -360,7 +363,7 @@ describe('Attack Tests', () => {
                 [0, 4, 0],
             ];
             const target3 = [0, 13];
-            testOutOfBoundAttack(ships, target3, 'target y coordinate is out of bound!');
+            testOutOfBoundAttack(ships, target3, 'Target y coordinate is out of bound!');
         });
     });
 });

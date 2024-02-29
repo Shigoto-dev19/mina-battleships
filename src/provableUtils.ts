@@ -154,21 +154,141 @@ class AttackUtils {
         return target.map(Field);
     }
 
-    static serializeHitHistory(hitHistory: Field[]) { 
+    static serializeHitCountHistory(hitHistory: Field[]) {
         const [player1HitCount, player2HitCount] = hitHistory;
         const player1HitCountBits = player1HitCount.toBits(5);
         const player2HitCountBits = player2HitCount.toBits(5);
-        const serializedHitHistory = Field.fromBits([...player1HitCountBits, ...player2HitCountBits]);
-       
+
+        const serializedHitCountHistory = Field.fromBits([...player1HitCountBits, ...player2HitCountBits]);
+        
+        return serializedHitCountHistory
+    }
+
+    static serializeHitTargetHistory(hitTargetHistory: Field[][]) {
+        const [player1HitTargets, player2HitTargets] = hitTargetHistory;
+        const player1HitTargetBits = player1HitTargets.map(f => f.toBits(7)).flat();
+        const player2HitTargetBits = player2HitTargets.map(f => f.toBits(7)).flat();
+
+        const serializedHitTargetHistory = Field.fromBits([...player1HitTargetBits, ...player2HitTargetBits]);
+        
+        return serializedHitTargetHistory;
+    }
+
+    static serializeHitHistory(serializedHitCountHistory: Field, serializeHitTargetHistory: Field) { 
+        const hitCountHistoryBits = serializedHitCountHistory.toBits(10);
+
+        const hitTargetHistoryBits = serializeHitTargetHistory.toBits(238);
+
+        const serializedHitHistory = Field.fromBits(
+            [
+                ...hitCountHistoryBits,
+                ...hitTargetHistoryBits,
+            ]);
+        
         return serializedHitHistory
     }
 
-    static deserializeHitHistory(serializedHitHistory: Field) { 
-        const bits = serializedHitHistory.toBits(10);
+    static deserializeHitHistory(serializedHitHistory: Field): [Field[], Field[][]] { 
+        const bits = serializedHitHistory.toBits(248);
+
         const player1HitCount = Field.fromBits(bits.slice(0, 5));
         const player2HitCount = Field.fromBits(bits.slice(5, 10));
 
-        return [player1HitCount, player2HitCount];
+        const serializedPlayer1HitTargetHistory = Field.fromBits(bits.slice(10, 129));
+        const serializedPlayer2HitTargetHistory = Field.fromBits(bits.slice(129, 248));
+
+        // playerHitTargets array contains the serialized targets that landed a successful hit.
+        const player1HitTargets = AttackUtils.deserializeHitTargetHistory(serializedPlayer1HitTargetHistory);
+        const player2HitTargets = AttackUtils.deserializeHitTargetHistory(serializedPlayer2HitTargetHistory);
+
+        return [
+            [player1HitCount, player2HitCount], 
+            [player1HitTargets, player2HitTargets],
+        ];
+    }
+
+    /**
+     * We serialize data differently than serializeTarget to showcase an alternative approach and to conserve storage space.
+     * 
+     * When bitifying two numbers from 0 to 9 together, it typically requires 8 bits in total. However, by employing a technique
+     * like bitifying 9 + 9*10 + 1, we reduce the storage requirement to 7 bits. This results in a total saving of 32 bits
+     * because we store a maximum of 32 targets that land a successful hit.
+     * 
+     * @note Before serializing and storing a target, ensure it successfully hits its intended destination.
+     */
+    static serializeHitTarget(hitTarget: Field[]) { 
+        /**
+         * Serialization is achieved by mapping a target [x, y] to a single field element: x + 10 * y.
+         * 
+         * To distinguish serialized hit targets from initial values, we add one to the result. 
+         * For example, if [0, 0] represents a target that successfully hits the adversary, 
+         * serializing it would result in 0, which is indistinguishable from the initial value and prone to errors.
+         * 
+         * Therefore, we add one to the serialized value to avoid confusion and ensure proper differentiation.
+         */
+        const serializedHitTarget = hitTarget[0].add(hitTarget[1].mul(10)).add(1);
+        return serializedHitTarget;
+    }
+
+    // returns an array of serialized hitTargets
+    static deserializeHitTargetHistory(hitTargetHistory: Field) {
+        const hitTargetHistoryBits = hitTargetHistory.toBits(119);
+        let hitTargetsBits: Bool[][] = [];
+
+        for (let i = 0; i < hitTargetHistoryBits.length; i += 7) {
+            // Slice the original array into smaller arrays of length 7
+            const parsedArray = hitTargetHistoryBits.slice(i, i + 7);
+            // Push the parsed array into the parsedArrays array
+            hitTargetsBits.push(parsedArray);
+        }
+
+        return hitTargetsBits.map(f => Field.fromBits(f));
+    }
+
+    //TODO validate before update
+    //TODO should return field
+    static updateHitTargetHistory(target: Field[], isHit: Bool, playerHitTargets: Field[], index: Field) {
+        const serializedTarget = AttackUtils.serializeHitTarget(target);
+
+        let serializedHitTarget = Provable.if(
+            isHit,
+            serializedTarget,
+            Field(0),
+        );
+        
+        const updatedPlayerHitTargets = Provable.witness(Provable.Array(Field, 17), () => {
+            const hitTargetIndex = Number(index.toBigInt());
+            
+            // Modifying the function input could compromise the provability of the attack method.
+            // To prevent this, we create a copy of the input array instead of directly modifying it.
+            // This ensures that the attack method operates on a separate copy, preserving the integrity of the original input.
+            let updated = [...playerHitTargets]
+            updated[hitTargetIndex] = serializedHitTarget;
+            
+            return updated;
+        });
+
+        return updatedPlayerHitTargets
+    }
+
+    /**
+     * Ensures a hit Target is not nullified for a given player.
+     * 
+     * A player should not be able to select a target that has already been hit in a previous turn.
+     * Allowing such action would unfairly score points multiple times with the same target, compromising game fairness.
+     * Missed targets are not stored as they do not affect the game state, making it illogical to select them.
+     */
+    static validateHitTargetUniqueness(target: Field[], hitTargetHistory: Field[]) {
+        // We opt not to deserialize the hitTargetHistory to save computational resources.
+        // Instead we serialize the target and then directly scan occurrences through an array of serialized targets. 
+        // This approach conserves computational resources and enhances efficiency.
+        let serializedTarget = AttackUtils.serializeHitTarget(target);
+        let check = Provable.witness(Bool, () => {
+            let isNullified = hitTargetHistory.some(item => item.equals(serializedTarget).toBoolean());
+            return Bool(isNullified)
+        });
+
+        return check
     }
 }
 
