@@ -143,6 +143,19 @@ class AttackUtils {
         return [targetX, targetY];
     }
 
+    static decodeHitTarget(serializedTarget: Field) {
+        const deserializedTarget = Provable.witness(Provable.Array(Field, 2), () => {
+            let serialized = serializedTarget.toBigInt() - 1n;
+            const x = serialized % 10n;
+            const y = serialized / 10n;
+
+            return [x, y].map(Field);
+        });
+        serializedTarget.assertEquals(AttackUtils.encodeHitTarget(deserializedTarget));
+
+        return deserializedTarget
+    }
+
     static validateTarget(serializedTarget: Field) { 
         // validate that the target is in the game map range
         const target = AttackUtils.deserializeTarget(serializedTarget);
@@ -208,26 +221,25 @@ class AttackUtils {
     }
 
     /**
-     * We serialize data differently than serializeTarget to showcase an alternative approach and to conserve storage space.
+     * We encode data differently than serializeTarget to showcase an alternative approach and to conserve storage space.
      * 
      * When bitifying two numbers from 0 to 9 together, it typically requires 8 bits in total. However, by employing a technique
-     * like bitifying 9 + 9*10 + 1, we reduce the storage requirement to 7 bits. This results in a total saving of 32 bits
-     * because we store a maximum of 32 targets that land a successful hit.
+     * like bitifying 9 + 9*10 + 1, we reduce the storage requirement to 7 bits. This results in a total saving of 34 bits
+     * because we store a maximum of 34 targets that land a successful hit.
      * 
-     * @note Before serializing and storing a target, ensure it successfully hits its intended destination.
      */
-    static serializeHitTarget(hitTarget: Field[]) { 
+    static encodeHitTarget(hitTarget: Field[]) { 
         /**
-         * Serialization is achieved by mapping a target [x, y] to a single field element: x + 10 * y.
+         * Serialization is achieved by mapping a target [x, y] to a single field element: x + 10 * y + 1.
          * 
-         * To distinguish serialized hit targets from initial values, we add one to the result. 
+         * To distinguish encoded hit targets from initial values, we add one to the result. 
          * For example, if [0, 0] represents a target that successfully hits the adversary, 
          * serializing it would result in 0, which is indistinguishable from the initial value and prone to errors.
          * 
-         * Therefore, we add one to the serialized value to avoid confusion and ensure proper differentiation.
+         * Therefore, we add one to the encoded value to avoid confusion and ensure proper differentiation.
          */
-        const serializedHitTarget = hitTarget[0].add(hitTarget[1].mul(10)).add(1);
-        return serializedHitTarget;
+        const encodeHitTarget = hitTarget[0].add(hitTarget[1].mul(10)).add(1);
+        return encodeHitTarget;
     }
 
     // returns an array of serialized hitTargets
@@ -248,11 +260,13 @@ class AttackUtils {
     //TODO validate before update
     //TODO should return field
     static updateHitTargetHistory(target: Field[], isHit: Bool, playerHitTargets: Field[], index: Field) {
-        const serializedTarget = AttackUtils.serializeHitTarget(target);
-
-        let serializedHitTarget = Provable.if(
+        const encodedTarget = AttackUtils.encodeHitTarget(target);
+        
+        // Before encoding and storing a target, ensure it successfully hits its intended destination.
+        // Otherwise take the encoded targetas init value = 0
+        let encodedHitTarget = Provable.if(
             isHit,
-            serializedTarget,
+            encodedTarget,
             Field(0),
         );
         
@@ -263,7 +277,7 @@ class AttackUtils {
             // To prevent this, we create a copy of the input array instead of directly modifying it.
             // This ensures that the attack method operates on a separate copy, preserving the integrity of the original input.
             let updated = [...playerHitTargets]
-            updated[hitTargetIndex] = serializedHitTarget;
+            updated[hitTargetIndex] = encodedHitTarget;
             
             return updated;
         });
@@ -282,7 +296,7 @@ class AttackUtils {
         // We opt not to deserialize the hitTargetHistory to save computational resources.
         // Instead we serialize the target and then directly scan occurrences through an array of serialized targets. 
         // This approach conserves computational resources and enhances efficiency.
-        let serializedTarget = AttackUtils.serializeHitTarget(target);
+        let serializedTarget = AttackUtils.encodeHitTarget(target);
         let check = Provable.witness(Bool, () => {
             let isNullified = hitTargetHistory.some(item => item.equals(serializedTarget).toBoolean());
             return Bool(isNullified)

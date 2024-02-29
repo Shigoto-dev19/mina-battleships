@@ -133,3 +133,8 @@ whether a game is joinable or not.
 - Depending on the size of the variable, the developer can bundle a set of small-size state and store it as a single field on-chain.
     - This technique evidently saves storage on-chain with the tradeoff of adding computation(deserialization) when generating the proof.
     - This can be helpful especially when developing a game due to the need of multiple state variables.
+- I think it would be good to add a variable in o1js that fetches state from the zkapp --> This would help reduce variable calls to fetch on-chain data.
+    ````typescript
+     let state-on-chain = zkapp.state.get(); 
+     let { state1, stat2, state3 } = state-on-chain;
+    ````

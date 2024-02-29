@@ -228,12 +228,13 @@ class BattleShipsClient {
         const PURPLE = '\x1b[35m%s\x1b[0m';
         const BLUE = '\x1b[36m%s\x1b[0m';
         const inBoldGreen = (msg: string) => `\x1b[1m\x1b[32m${msg}\x1b[0m`;
-        
-        const isHost = this.playerId.toBigInt() === hostId;
+        const LINE = '-'.repeat(107);
 
-        console.log('----------------------------------------------------------------------------------');
+        const isHost = this.playerId.toBigInt() === hostId;
+        
+        console.log(LINE);
         console.log(PURPLE, `${isHost ? 'Host' : 'Joiner'} - Player${isHost ? '1' : '2'} Game Stats`);
-        console.log('----------------------------------------------------------------------------------');
+        console.log(LINE);
         console.log(BLUE, 'Turn Count:      ', turnCount);
         console.log(BLUE, 'MINA Address:    ', this.playerAddress.toBase58());
         console.log(BLUE, 'Player HEX ID:   ', this.playerId.toBigInt().toString(16));
@@ -248,7 +249,7 @@ class BattleShipsClient {
             console.log(BLUE, 'Winner: ', `         ${inBoldGreen('Joiner - Player2')}`);
         else 
             console.log(BLUE, 'No Winner yet!');
-        console.log('----------------------------------------------------------------------------------\n');
+        console.log(LINE, '\n');
     }
 
     displayGameSummary() {

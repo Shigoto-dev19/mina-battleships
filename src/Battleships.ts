@@ -267,3 +267,4 @@ class Battleships extends SmartContract {
 //TODO have a last check on zkapp error handling & messages
 
 //players from hitting the same target multiple times
+//TODO Add salt for player ID generation 
