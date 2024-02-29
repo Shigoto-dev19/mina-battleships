@@ -8,6 +8,7 @@ export {
   printPlayerAndAdversaryBoards, 
   printHitResult,
   parseCoordinates,
+  printLog,
 }
 
 const PENDING_BLUE_SYMBOL = '\x1b[34mP\x1b[0m\x1b[0m';
@@ -176,4 +177,17 @@ function parseCoordinates(target: number[]) {
   const column = target[0];
 
   return `${row}${column}`;
+}
+
+/**
+ * Prints a message to the console, overwriting the current line if the output is a terminal.
+ * 
+ * @param {string} msg The message to print.
+ */
+function printLog(msg: string) {
+  if (process.stdout.isTTY) {
+      process.stdout.clearLine(-1);
+      process.stdout.cursorTo(0);
+      process.stdout.write(msg);
+  }
 }
