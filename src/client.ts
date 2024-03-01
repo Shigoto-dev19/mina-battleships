@@ -29,7 +29,26 @@ import {
 
 export { BattleShipsClient }
 
-//TODO Point to redundancy of game data storage and that the merkle tree are sustainble in case of error
+/**
+ * The `BattleShipsClient` class acts as a convenient wrapper for players to interact with the Battleships zkapp
+ * while also managing off-chain storage seamlessly.
+ * 
+ * Note: This class stores both player and adversary targets and hits. While all data can be fetched from the hit & target Merkle Tree,
+ *       we update local class storage alongside the tree before and after sending a transaction to the zkapp. This ensures clarity and 
+ *       redundancy in data storage.
+ * 
+ * In fact, all data can be fetched from the hit & target Merkle Trees based on storage index parity: even index for the host 
+ * and odd index for the joiner.
+ *
+ * The Merkle Trees are crucial for proving to the zkapp that the player has not missed any storage for hits or targets,
+ * and they act as a backup for game state storage. 
+ * 
+ * Storing data only locally(class) could lead to the collapse of the entire game state on the user interface if even a single value is missed, 
+ * as the state gets continually updated in sequence with game progress.
+ * 
+ * Therefore, while it might seem redundant to store data in both the Merkle Trees and locally, it ensures the sustainability 
+ * of the game data in case of errors or discrepancies.
+ */
 class BattleShipsClient {
     public zkapp: BattleshipsZkApp;
 
@@ -113,9 +132,11 @@ class BattleShipsClient {
     }
 
     async playFirstTurn(firstTarget: number[]) {
-        let index = this.zkapp.turns.get();
-        let w = this.targetTree.getWitness(index.toBigInt());
-        let targetWitness = new TargetMerkleWitness(w);
+        // The index of target merkle tree witness is the turn count
+        const index = this.zkapp.turns.get();
+
+        const w = this.targetTree.getWitness(index.toBigInt());
+        const targetWitness = new TargetMerkleWitness(w);
 
         const serializedTarget = AttackUtils.serializeTarget(firstTarget);
 
@@ -126,39 +147,39 @@ class BattleShipsClient {
         await firstTurnTx.prove();
         await firstTurnTx.sign([this.playerKey]).send();
 
-        // fetch the updated target on-chain
+        // Fetch the player target stored on-chain
         const storedTarget = this.zkapp.target.get();
 
-        // update the local off-chain target tree
+        // Update the local off-chain target Merkle Tree
         this.targetTree.setLeaf(index.toBigInt(), storedTarget); 
 
-        // update local storage and point target to the adversary's grid display
+        // Update class local storage and point target to the adversary's grid display
         this.playerTargets.push(firstTarget);
         this.adversaryGridDisplay[firstTarget[1]][firstTarget[0]] = PENDING_BLUE_SYMBOL;
     }
 
     async playTurn(target: number[]) {
-        // fetch the target from the previous turn 
+        // Fetch the adversary target from the previous turn 
         const adversarySerializedTarget = this.zkapp.target.get();
         
-        // deserialize & update the local enemy target storage
+        // Deserialize & update the local enemy target storage
         const adversaryTarget = AttackUtils.deserializeTarget(adversarySerializedTarget).map(f => Number(f.toBigInt()));
         this.adversaryTargets.push(adversaryTarget);
         
-        // fetch the last turn count
-        let index = this.zkapp.turns.get().toBigInt();
+        // Fetch the last turn count
+        const index = this.zkapp.turns.get().toBigInt();
 
         if (index >= 2n) {
             const previousHitResult = this.zkapp.hitResult.get().toField();
-            // update the off-chain hit tree from previous turn
+            // Update the off-chain hit Merkle Tree from the player's previous turn
             this.hitTree.setLeaf(index - 2n, previousHitResult); 
 
-            // parse & update the local player hit results
+            // Parse & update the local player hit results
             const parsedPreviousHitResult = Number(previousHitResult.toBigInt());
             this.playerHits.push(parsedPreviousHitResult);
 
-            // fetch the previous player's target to point it with hit Result on the enemy grid
-            let previousTarget = this.playerTargets[this.playerTargets.length - 1];
+            // Fetch the previous player's target to point it with hit Result on the enemy grid
+            const previousTarget = this.playerTargets[this.playerTargets.length - 1];
 
             if (parsedPreviousHitResult === 1) {
                 this.playerHitCount++; 
@@ -166,41 +187,41 @@ class BattleShipsClient {
             }  else this.adversaryGridDisplay[previousTarget[1]][previousTarget[0]] = MISS_RED_SYMBOL;   
         }
 
-        // update the target Merkle Tree: previous turn
+        // Update the target Merkle Tree: previous turn
         this.targetTree.setLeaf(index - 1n, adversarySerializedTarget);
 
-        let wTarget = this.targetTree.getWitness(index);
-        let targetWitness = new TargetMerkleWitness(wTarget);
+        const wTarget = this.targetTree.getWitness(index);
+        const targetWitness = new TargetMerkleWitness(wTarget);
 
-        let hTarget = this.hitTree.getWitness(index - 1n);
-        let hitWitness = new HitMerkleWitness(hTarget);
+        const hTarget = this.hitTree.getWitness(index - 1n);
+        const hitWitness = new HitMerkleWitness(hTarget);
 
         const serializedTarget = AttackUtils.serializeTarget(target);
 
-        let attackTx = await Mina.transaction(this.playerAddress, () => {
+        const attackTx = await Mina.transaction(this.playerAddress, () => {
             this.zkapp.attack(serializedTarget, this.serializedBoard, this.salt, targetWitness, hitWitness);
         });
 
         await attackTx.prove();
         await attackTx.sign([this.playerKey]).send();
 
-        // fetch the updated target on-chain
+        // Fetch the updated target on-chain
         const storedTarget = this.zkapp.target.get();
 
-        // update the local off-chain target tree
+        // Update the local off-chain target Merkle Tree
         this.targetTree.setLeaf(index, storedTarget); 
         
-        // store the player's choice locally
+        // Store the player's target locally
         this.playerTargets.push(target);
         this.adversaryGridDisplay[target[1]][target[0]] = PENDING_BLUE_SYMBOL;
 
-        // fetch the updated hit on-chain
+        // Fetch the updated hit on-chain
         const storedHitResult = this.zkapp.hitResult.get().toField();
 
-        // update the local off-chain hit tree
+        // Update the local off-chain hit Merkle Tree
         this.hitTree.setLeaf(index -1n, storedHitResult); 
 
-        // parse & update local state related to the adversary's hit result
+        // Parse & update local state related to the adversary's hit result
         const parsedAdversaryHitResult = Number(storedHitResult.toBigInt());
         
         if (parsedAdversaryHitResult === 1) {
@@ -243,7 +264,7 @@ class BattleShipsClient {
         console.log(BLUE, 'Player HEX ID:   ', this.playerId.toBigInt().toString(16));
         console.log(BLUE, 'Score:           ', `${this.playerHitCount} - ${this.adversaryHitCount}`);
         console.log(BLUE, `Targeted shots:  `, `${this.adversaryTargets.length === 0 ? 'None' : ''}`);
-        for(let turn=0; turn< this.playerTargets.length; turn++) 
+        for(let turn=0; turn < this.playerTargets.length; turn++) 
             console.log(`                  Target #${turn+1} --> ${parseCoordinates(this.playerTargets[turn])} --> ${printHitResult(this.playerHits[turn])}`);
         
         if (hostId === winnerId!) 
