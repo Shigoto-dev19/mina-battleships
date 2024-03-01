@@ -40,6 +40,13 @@ class Battleships extends SmartContract {
     @state(Field) hitRoot = State<Field>();
     @state(Field) serializedHitHistory = State<Field>();
 
+    events = { 
+        "Game Hosted: A new Battleships game has been initiated!": Field,
+        "Player Joined: A new player has joined the hosted game!": Field,
+        "Game Started: The host has played the opening shot!": Field,
+        "Turn Wrapped Up: The current player has completed their turn!": Field,
+    }
+
     @method initGame() { 
         super.init();
         
@@ -54,22 +61,25 @@ class Battleships extends SmartContract {
     }
 
     //TODO use generatePlayerID and fix notation
-    @method hostGame(serializedBoard1: Field, salt: Field) {
-        // fetch on-chain player1 ID
-        const host = this.player1Id.getAndRequireEquals();
+    @method hostGame(serializedBoard: Field, salt: Field) {
+        // fetch the on-chain player1 ID
+        const storedHostId = this.player1Id.getAndRequireEquals();
         
         /**
          * Assert that hostID is not updated yet.
          * !Make sure nobody tampers with the host ID once updated!
          */ 
-        host.assertEquals(0, "This game has already a host!");
+        storedHostId.assertEquals(0, "This game has already a host!");
 
-        // assert that host ships placement is valid
-        const boardHash1 = BoardCircuit.validateBoard(serializedBoard1);  
+        // assert that board ship placements are valid
+        const boardHash1 = BoardCircuit.validateBoard(serializedBoard);  
 
         // calculate host ID & store it on-chain
         const hostId = Poseidon.hash([boardHash1, ...this.sender.toFields(), salt]);
         this.player1Id.set(hostId);
+
+        // emit event for successfully hosting a battleships game
+        this.emitEvent("Game Hosted: A new Battleships game has been initiated!", hostId);
     }   
     
     //TODO use generatePlayerID and fix notation
@@ -78,10 +88,10 @@ class Battleships extends SmartContract {
         //TODO? refer to each game to be joinable by a gameID
 
         // fetch on-chain player2 ID
-        const joiner = this.player2Id.getAndRequireEquals();
+        const storedJoinerId = this.player2Id.getAndRequireEquals();
 
         // assert that no one has already joined the game
-        joiner.assertEquals(0, 'This game is already full!');
+        storedJoinerId.assertEquals(0, 'This game is already full!');
 
         // assert that joiner ships placement is valid
         const boardHash2 = BoardCircuit.validateBoard(serializedBoard2);  
@@ -89,6 +99,9 @@ class Battleships extends SmartContract {
         // calculate joiner ID & store it on-chain
         const joinerId = Poseidon.hash([boardHash2, ...this.sender.toFields(), salt]);
         this.player2Id.set(joinerId);
+
+        // emit event for successfully joining a battleships game
+        this.emitEvent("Player Joined: A new player has joined the hosted game!", joinerId);
     }
 
     /**
@@ -104,10 +117,10 @@ class Battleships extends SmartContract {
         const computedPlayerId = BoardUtils.generatePlayerId(serializedBoard, this.sender, salt);
 
         // fetch on-chain host ID 
-        const hostId = this.player1Id.getAndRequireEquals();
+        const storedHostId = this.player1Id.getAndRequireEquals();
 
         // restrict access to this method to the game's host
-        computedPlayerId.assertEquals(hostId, 'Only the host is allowed to play the opening shot!')
+        computedPlayerId.assertEquals(storedHostId, 'Only the host is allowed to play the opening shot!')
         
         // validate that the target is in the game map range
         AttackUtils.validateTarget(serializedTarget);
@@ -136,6 +149,9 @@ class Battleships extends SmartContract {
 
         // increment the turn counter
         this.turns.set(turns.add(1));
+
+        // emit event for successfully submitting the opening shot
+        this.emitEvent("Game Started: The host has played the opening shot!", storedHostId);
     }
 
     @method attack(serializedTarget: Field, serializedBoard: Field, salt: Field, targetWitness: TargetMerkleWitness, hitWitness: HitMerkleWitness) { 
@@ -206,8 +222,6 @@ class Battleships extends SmartContract {
         let adversaryTarget = AttackUtils.deserializeTarget(adversarySerializedTarget);
         let adversaryHitResult = AttackCircuit.attack(deserializedBoard, adversaryTarget);
         
-        //TODO Emit winner event
-
         // update the on-chain hit result
         this.hitResult.set(adversaryHitResult);
 
@@ -253,21 +267,14 @@ class Battleships extends SmartContract {
 
         // increment turn counter
         this.turns.set(turns.add(1));
+        
+        // emit event for successfully submitting a valid attack
+        this.emitEvent("Turn Wrapped Up: The current player has completed their turn!", senderId);
     }
     
     @method finalizeGame() { return }
 }
 
-//TODO Reset game when finished(keep state transition in mind)
-//TODO Add salt when generating player ID --> we want player to be able to reuse same board without generating the same ID  
-
-//TODO? Emit event following game actions
-
-//TODO in the target serialized --> proivde bits to store hit target --> we need to prevent a player from hitting the same target and keep claiming hits?
-//TODO --> the good thing we will only prevent the player from hitting hit target and the missed ones won't affect the game
-//TODO --> better than nullifier semantics 
-//TODO --> add one after serialized to distinguish value from initial value
+//TODO? Reset game when finished(keep state transition in mind)
 //TODO have a last check on zkapp error handling & messages
 
-//players from hitting the same target multiple times
-//TODO Add salt for player ID generation 
