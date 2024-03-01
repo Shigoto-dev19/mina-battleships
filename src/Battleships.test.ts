@@ -1,5 +1,5 @@
 import { 
-  Battleships, 
+  BattleshipsZkApp, 
   TargetMerkleWitness,
   HitMerkleWitness,
   EMPTY_TREE8_ROOT,
@@ -18,7 +18,7 @@ import { AttackUtils, BoardUtils } from './provableUtils';
 
 const proofsEnabled = false;
 
-async function localDeploy(zkapp: Battleships, deployerKey: PrivateKey, zkappPrivateKey: PrivateKey) { 
+async function localDeploy(zkapp: BattleshipsZkApp, deployerKey: PrivateKey, zkappPrivateKey: PrivateKey) { 
   const deployerAccount = deployerKey.toPublicKey();
   const tx = await Mina.transaction(deployerAccount, () => {
     AccountUpdate.fundNewAccount(deployerAccount);
@@ -29,7 +29,7 @@ async function localDeploy(zkapp: Battleships, deployerKey: PrivateKey, zkappPri
   await tx.sign([deployerKey, zkappPrivateKey]).send();
 }
 
-async function initializeGame(zkapp: Battleships, deployerKey: PrivateKey) {
+async function initializeGame(zkapp: BattleshipsZkApp, deployerKey: PrivateKey) {
   const deployerAccount = deployerKey.toPublicKey();
   
   // deployer initializes zkapp
@@ -47,7 +47,7 @@ describe('Battleships Game Tests', () => {
     intruderKey: PrivateKey,
     zkappAddress: PublicKey,
     zkappPrivateKey: PrivateKey,
-    zkapp: Battleships,
+    zkapp: BattleshipsZkApp,
     targetTree: MerkleTree,
     hitTree: MerkleTree,
     hostBoard: number[][],
@@ -57,7 +57,7 @@ describe('Battleships Game Tests', () => {
     intruderBoard: number[][];
     
     beforeAll(async () => {
-      if (proofsEnabled) await Battleships.compile();
+      if (proofsEnabled) await BattleshipsZkApp.compile();
   
       // setup local blockchain
       const Local = Mina.LocalBlockchain({ proofsEnabled });
@@ -71,7 +71,7 @@ describe('Battleships Game Tests', () => {
       // zkapp account
       zkappPrivateKey = PrivateKey.random();
       zkappAddress = zkappPrivateKey.toPublicKey();
-      zkapp = new Battleships(zkappAddress);
+      zkapp = new BattleshipsZkApp(zkappAddress);
 
       // initialize local Merkle Tree for target & hit storage
       targetTree = new MerkleTree(8);
@@ -571,7 +571,7 @@ describe('Battleships Game Tests', () => {
       });
 
       // player2 turn --> turn = 7 --> report player1 Miss
-      it('should accept player2 sending a valid attack TX choosing a previous target that was a MISS: 6th check', async () => {
+      it('should accept player2 sending a valid attack TX choosing a previous target that was a MISS: 7th check', async () => {
         await testValidAttack(joinerKey, joinerBoard, joinerSalt, [9, 0], false, [1, 2]);
       });
     });      

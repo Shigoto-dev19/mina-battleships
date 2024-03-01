@@ -19,7 +19,7 @@ import {
 } from './provableUtils.js'; 
 
 export { 
-    Battleships,
+    BattleshipsZkApp,
     TargetMerkleWitness,
     HitMerkleWitness, 
     EMPTY_TREE8_ROOT,
@@ -30,7 +30,7 @@ const EMPTY_TREE8_ROOT = Field(1447284246012508664544490936857120907919499162790
 class TargetMerkleWitness extends MerkleWitness(8) {}
 class HitMerkleWitness extends MerkleWitness(8) {}
 
-class Battleships extends SmartContract { 
+class BattleshipsZkApp extends SmartContract { 
     @state(Field) player1Id = State<Field>();
     @state(Field) player2Id = State<Field>();
     @state(UInt8) turns = State<UInt8>();

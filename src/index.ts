@@ -1,3 +1,3 @@
-import { Battleships } from './Battleships.js';
+import { BattleshipsZkApp } from './Battleships.js';
 
-export { Battleships };
+export { BattleshipsZkApp };

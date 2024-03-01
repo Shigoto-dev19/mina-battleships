@@ -16,7 +16,7 @@
  * 
  */
 
-import { Battleships } from './Battleships.js';
+import { BattleshipsZkApp } from './Battleships.js';
 import { BattleShipsClient } from './client.js';
 import { printLog } from './displayUtils.js';
 import {
@@ -26,9 +26,10 @@ import {
   PublicKey,
 } from 'o1js';
 
+//TODO Add checkmarks and log after Tx is valid
 const proofsEnabled = process.argv[2] ? true : false;
 
-async function localDeploy(zkapp: Battleships, deployerKey: PrivateKey, zkappPrivateKey: PrivateKey) { 
+async function localDeploy(zkapp: BattleshipsZkApp, deployerKey: PrivateKey, zkappPrivateKey: PrivateKey) { 
   const deployerAccount = deployerKey.toPublicKey();
   const tx = await Mina.transaction(deployerAccount, () => {
     AccountUpdate.fundNewAccount(deployerAccount);
@@ -39,7 +40,7 @@ async function localDeploy(zkapp: Battleships, deployerKey: PrivateKey, zkappPri
   await tx.sign([deployerKey, zkappPrivateKey]).send();
 }
   
-async function initializeGame(zkapp: Battleships, deployerKey: PrivateKey) {
+async function initializeGame(zkapp: BattleshipsZkApp, deployerKey: PrivateKey) {
   const deployerAccount = deployerKey.toPublicKey();
 
   // deployer initializes zkapp
@@ -58,11 +59,11 @@ async function runGame(gameBoard: typeof game1Boards, gameShots: typeof game1Sho
   joinerKey: PrivateKey, 
   zkappAddress: PublicKey,
   zkappPrivateKey: PrivateKey,
-  zkapp: Battleships,
+  zkapp: BattleshipsZkApp,
   joiner: BattleShipsClient,
   host: BattleShipsClient;
 
-  if (proofsEnabled) await Battleships.compile();
+  if (proofsEnabled) await BattleshipsZkApp.compile();
 
   // setup local blockchain
   const Local = Mina.LocalBlockchain({ proofsEnabled });
@@ -75,7 +76,7 @@ async function runGame(gameBoard: typeof game1Boards, gameShots: typeof game1Sho
   // zkapp account
   zkappPrivateKey = PrivateKey.random();
   zkappAddress = zkappPrivateKey.toPublicKey();
-  zkapp = new Battleships(zkappAddress);
+  zkapp = new BattleshipsZkApp(zkappAddress);
 
   // initialize client for each player
   host = BattleShipsClient.initialize(zkapp, hostKey, gameBoard.host);

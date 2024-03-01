@@ -7,7 +7,7 @@ import {
     Mina,
 } from 'o1js';
 import { 
-    Battleships,
+    BattleshipsZkApp,
     HitMerkleWitness, 
     TargetMerkleWitness 
 } from './Battleships.js';
@@ -31,7 +31,7 @@ export { BattleShipsClient }
 
 //TODO Point to redundancy of game data storage and that the merkle tree are sustainble in case of error
 class BattleShipsClient {
-    public zkapp: Battleships;
+    public zkapp: BattleshipsZkApp;
 
     private playerKey: PrivateKey;
     public playerAddress: PublicKey;
@@ -57,7 +57,7 @@ class BattleShipsClient {
     public playerHits: number[];
     
     constructor(
-        zkapp: Battleships,
+        zkapp: BattleshipsZkApp,
         playerKey: PrivateKey,
         board: number[][],
     ) {
@@ -86,7 +86,7 @@ class BattleShipsClient {
         this.playerHits = [];
     }
 
-    static initialize(zkapp: Battleships, playerKey: PrivateKey, board: number[][]) {
+    static initialize(zkapp: BattleshipsZkApp, playerKey: PrivateKey, board: number[][]) {
         return new BattleShipsClient(
             zkapp,
             playerKey,

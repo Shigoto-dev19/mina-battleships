@@ -49,7 +49,7 @@ function generateEmptyGameGrid(): string[][] {
 /**
  * Positions ships on a 10x10 grid representing a Battleships board.
  * 
- * @param ships An array of ship configurations, where each ship is represented as [x, y, z] coordinates:
+ * @param board An array of ship configurations, where each ship is represented as [x, y, z] coordinates:
  *              x = x coordinate on the board
  *              y = y coordinate on the board 
  *              z = orientation (0=horizontal, 1=vertical)
