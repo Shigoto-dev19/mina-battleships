@@ -116,7 +116,7 @@ describe('Board Tests', () => {
                 [0, 3, 0],
                 [0, 4, 0],
             ];
-            testCollision(ships1, 'Invalid Board! Collision occured when placing Ship2!');
+            testCollision(ships1, 'Invalid Board! Collision occurred when placing Ship2!');
         });
 
         it("Placement violation: board 2", () => {
@@ -127,7 +127,7 @@ describe('Board Tests', () => {
                 [5, 9, 0],
                 [1, 8, 1],
             ];
-            testCollision(ships2, 'Invalid Board! Collision occured when placing Ship3!');
+            testCollision(ships2, 'Invalid Board! Collision occurred when placing Ship3!');
         });
 
         it("Placement violation: board 3", () => {
@@ -138,7 +138,7 @@ describe('Board Tests', () => {
                 [6, 5, 1],
                 [1, 7, 1],
             ];
-            testCollision(ships3, 'Invalid Board! Collision occured when placing Ship4!');
+            testCollision(ships3, 'Invalid Board! Collision occurred when placing Ship4!');
         });
 
         it("Placement violation: board 4", () => {
@@ -149,7 +149,7 @@ describe('Board Tests', () => {
                 [6, 8, 0],
                 [7, 7, 1],
             ];
-            testCollision(ships4, 'Invalid Board! Collision occured when placing Ship5!');
+            testCollision(ships4, 'Invalid Board! Collision occurred when placing Ship5!');
         });
     });
 });
