@@ -26,7 +26,6 @@ import {
   PublicKey,
 } from 'o1js';
 
-//TODO Add checkmarks and log after Tx is valid
 const proofsEnabled = process.argv[2] ? true : false;
 
 async function localDeploy(zkapp: BattleshipsZkApp, deployerKey: PrivateKey, zkappPrivateKey: PrivateKey) { 
@@ -43,7 +42,7 @@ async function localDeploy(zkapp: BattleshipsZkApp, deployerKey: PrivateKey, zka
 async function initializeGame(zkapp: BattleshipsZkApp, deployerKey: PrivateKey) {
   const deployerAccount = deployerKey.toPublicKey();
 
-  // deployer initializes zkapp
+  // The deployer initializes zkapp
   const initTx = await Mina.transaction(deployerAccount, () => {
     zkapp.initGame();
   });
@@ -53,7 +52,7 @@ async function initializeGame(zkapp: BattleshipsZkApp, deployerKey: PrivateKey) 
 }
 
 async function runGame(gameBoard: typeof game1Boards, gameShots: typeof game1Shots) {
-  console.log('Mina ZK Battleships: Game Simulation');
+  console.log('\x1b[1;35m', 'Mina ZK Battleships: Game Simulation', '\x1b[0m');
 
   let hostKey: PrivateKey,
   joinerKey: PrivateKey, 
@@ -65,7 +64,7 @@ async function runGame(gameBoard: typeof game1Boards, gameShots: typeof game1Sho
 
   if (proofsEnabled) await BattleshipsZkApp.compile();
 
-  // setup local blockchain
+  // Setup local blockchain
   const Local = Mina.LocalBlockchain({ proofsEnabled });
   Mina.setActiveInstance(Local);
 
@@ -73,33 +72,35 @@ async function runGame(gameBoard: typeof game1Boards, gameShots: typeof game1Sho
   hostKey = Local.testAccounts[0].privateKey;
   joinerKey = Local.testAccounts[1].privateKey;
 
-  // zkapp account
+  // Set up zkapp account
   zkappPrivateKey = PrivateKey.random();
   zkappAddress = zkappPrivateKey.toPublicKey();
   zkapp = new BattleshipsZkApp(zkappAddress);
 
-  // initialize client for each player
+  // Initialize client for each player
   host = BattleShipsClient.initialize(zkapp, hostKey, gameBoard.host);
   joiner = BattleShipsClient.initialize(zkapp, joinerKey, gameBoard.joiner);
 
-  // deploy and initialize game
+  // Deploy and initialize game
   await localDeploy(zkapp, hostKey, zkappPrivateKey);
   await initializeGame(zkapp, hostKey);
 
   console.time('Simulation Time: ');
 
-  console.log('Host new game');
   await host.hostGame();
+  console.log('\n✅ Host new game');
+
   host.displayGameSummary();
 
-  console.log('Join the game');
   await joiner.joinGame();
+  console.log('✅ Join the game');
+
   joiner.displayGameSummary();
 
-  console.log('Host plays opening shot');
   await host.playFirstTurn(gameShots.host[0]);
+  console.log('✅ Host plays opening shot');
 
-  console.log('Alternate player attacks');
+  console.log('\nAlternate player attacks');
   for (let player1_nonce = 1; player1_nonce <= gameShots.host.length - 1; player1_nonce++) {
     printLog(`Player2 reporting result of Player1 shot #${player1_nonce - 1} (Turn ${player1_nonce * 2 - 1})`)
     await joiner.playTurn(gameShots.joiner[player1_nonce - 1]);
@@ -108,8 +109,8 @@ async function runGame(gameBoard: typeof game1Boards, gameShots: typeof game1Sho
     await host.playTurn(gameShots.host[player1_nonce]);
   }  
 
-  console.log("\nPlayer wins on sinking all of adversary's ships");
   await joiner.playTurn(gameShots.joiner[gameShots.host.length - 1]);
+  console.log("\n\n✅ Player wins on sinking all of adversary's ships");
 
   /**
    * As the Battleships zkapp will revert any transactions after the game is over.   
@@ -167,7 +168,7 @@ const game1Shots = {
  */
 await runGame(game1Boards, game1Shots);
 
-
+/*
 const game2Boards = {
   host: [
     [4, 2, 1],
@@ -203,3 +204,4 @@ const game2Shots = {
 }
 
 await runGame(game2Boards, game2Shots); 
+*/
