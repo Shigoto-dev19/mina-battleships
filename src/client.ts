@@ -40,6 +40,8 @@ class BattleShipsClient {
     private board: number[][];
     private serializedBoard: Field;
 
+    private salt: Field;
+
     public playerTargets: number[][];
     public adversaryTargets: number[][];
 
@@ -63,10 +65,11 @@ class BattleShipsClient {
 
         this.board = board;
         this.serializedBoard = BoardUtils.serialize(board);
+        this.salt = Field.random();
 
         this.playerKey = playerKey;
         this.playerAddress = playerKey.toPublicKey();
-        this.playerId = BoardUtils.generatePlayerId(this.serializedBoard, this.playerAddress);
+        this.playerId = BoardUtils.generatePlayerId(this.serializedBoard, this.playerAddress, this.salt);
 
         this.playerTargets = [];
         this.adversaryTargets = [];
@@ -93,7 +96,7 @@ class BattleShipsClient {
     
     async hostGame() {
         const hostGameTx = await Mina.transaction(this.playerAddress, () => {
-          this.zkapp.hostGame(this.serializedBoard);
+          this.zkapp.hostGame(this.serializedBoard, this.salt);
         });
         
         await hostGameTx.prove();
@@ -102,7 +105,7 @@ class BattleShipsClient {
 
     async joinGame() {
         const joinGameTx = await Mina.transaction(this.playerAddress, () => {
-          this.zkapp.joinGame(this.serializedBoard);
+          this.zkapp.joinGame(this.serializedBoard, this.salt);
         });
         
         await joinGameTx.prove();
@@ -117,7 +120,7 @@ class BattleShipsClient {
         const serializedTarget = AttackUtils.serializeTarget(firstTarget);
 
         const firstTurnTx = await Mina.transaction(this.playerAddress, () => {
-          this.zkapp.firstTurn(serializedTarget, this.serializedBoard, targetWitness);
+          this.zkapp.firstTurn(serializedTarget, this.serializedBoard, this.salt, targetWitness);
         });
 
         await firstTurnTx.prove();
@@ -175,7 +178,7 @@ class BattleShipsClient {
         const serializedTarget = AttackUtils.serializeTarget(target);
 
         let attackTx = await Mina.transaction(this.playerAddress, () => {
-            this.zkapp.attack(serializedTarget, this.serializedBoard, targetWitness, hitWitness);
+            this.zkapp.attack(serializedTarget, this.serializedBoard, this.salt, targetWitness, hitWitness);
         });
 
         await attackTx.prove();

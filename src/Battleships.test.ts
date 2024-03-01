@@ -51,7 +51,9 @@ describe('Battleships Game Tests', () => {
     targetTree: MerkleTree,
     hitTree: MerkleTree,
     hostBoard: number[][],
+    hostSalt: Field,
     joinerBoard: number[][],
+    joinerSalt: Field,
     intruderBoard: number[][];
     
     beforeAll(async () => {
@@ -83,6 +85,7 @@ describe('Battleships Game Tests', () => {
         [0, 3, 0],
         [0, 4, 0],
       ];
+      hostSalt = Field.random();
 
       joinerBoard = [
         [9, 0, 1],
@@ -91,6 +94,7 @@ describe('Battleships Game Tests', () => {
         [6, 8, 0],
         [7, 7, 0],
       ];
+      joinerSalt = Field.random();
 
       // set up a local intruder board for testing purposes
       intruderBoard = [
@@ -145,7 +149,7 @@ describe('Battleships Game Tests', () => {
         const invalidSerializedBoard = BoardUtils.serialize(invalidHostBoard);
         const rejectedHostTX = async () => {
           let hostGameTx = await Mina.transaction(hostKey.toPublicKey(), () => {
-            zkapp.hostGame(invalidSerializedBoard);
+            zkapp.hostGame(invalidSerializedBoard, hostSalt);
           });
 
           await hostGameTx.prove();
@@ -157,15 +161,16 @@ describe('Battleships Game Tests', () => {
 
       it('should host a game and update player1Id', async () => {   
         const hostSerializedBoard = BoardUtils.serialize(hostBoard);
+        
         let hostGameTx = await Mina.transaction(hostKey.toPublicKey(), () => {
-          zkapp.hostGame(hostSerializedBoard);
+          zkapp.hostGame(hostSerializedBoard, hostSalt);
         });
         
         await hostGameTx.prove();
         await hostGameTx.sign([hostKey]).send();
 
         // compute player1Id locally 
-        const computedHostId = BoardUtils.generatePlayerId(hostSerializedBoard, hostKey.toPublicKey());
+        const computedHostId = BoardUtils.generatePlayerId(hostSerializedBoard, hostKey.toPublicKey(), hostSalt);
 
         // fetch the updated player1Id on-chain
         const hostId = zkapp.player1Id.get();
@@ -176,9 +181,10 @@ describe('Battleships Game Tests', () => {
 
       it('should prevent other players to re-host a game', async () => {   
         const intruderSerializedBoard = BoardUtils.serialize(intruderBoard);
+
         const intruderHostTX = async () => {
           let hostGameTx = await Mina.transaction(joinerKey.toPublicKey(), () => {
-            zkapp.hostGame(intruderSerializedBoard);
+            zkapp.hostGame(intruderSerializedBoard, hostSalt);
           });
 
           await hostGameTx.prove();
@@ -200,9 +206,10 @@ describe('Battleships Game Tests', () => {
         ];
         
         const invalidSerializedBoard = BoardUtils.serialize(invalidJoinerBoard);
+
         const rejectedJoinTX = async () => {
           let joinGameTx = await Mina.transaction(joinerKey.toPublicKey(), () => {
-            zkapp.joinGame(invalidSerializedBoard);
+            zkapp.joinGame(invalidSerializedBoard, joinerSalt);
           });
 
           await joinGameTx.prove();
@@ -214,15 +221,16 @@ describe('Battleships Game Tests', () => {
 
       it('should join a game and update player2Id', async () => {
         const joinerSerializedBoard = BoardUtils.serialize(joinerBoard);
+
         let joinGameTx = await Mina.transaction(joinerKey.toPublicKey(), () => {
-          zkapp.joinGame(joinerSerializedBoard);
+          zkapp.joinGame(joinerSerializedBoard, joinerSalt);
         });
         
         await joinGameTx.prove();
         await joinGameTx.sign([joinerKey]).send();
 
         // compute player2Id locally 
-        const computedjoinerId = BoardUtils.generatePlayerId(joinerSerializedBoard, joinerKey.toPublicKey());
+        const computedjoinerId = BoardUtils.generatePlayerId(joinerSerializedBoard, joinerKey.toPublicKey(), joinerSalt);
 
         // fetch the updated player1Id on-chain
         const joinerId = zkapp.player2Id.get()
@@ -233,9 +241,10 @@ describe('Battleships Game Tests', () => {
 
       it('should prevent other players to join a full game', async () => {
         const intruderSerializedBoard = BoardUtils.serialize(intruderBoard);
+
         const intruderJoinTX = async () => {
           let joinGameTx = await Mina.transaction(intruderKey.toPublicKey(), () => {
-            zkapp.joinGame(intruderSerializedBoard);
+            zkapp.joinGame(intruderSerializedBoard, joinerSalt);
           });
 
           await joinGameTx.prove();
@@ -253,11 +262,12 @@ describe('Battleships Game Tests', () => {
         let targetWitness = new TargetMerkleWitness(w);
 
         const serializedBoard = BoardUtils.serialize(callerBoard);
+
         const serializedTarget = AttackUtils.serializeTarget(callerTarget);
 
         const rejectedFirstTurnTx = async () => {
           let firstTurnTx = await Mina.transaction(callerKey.toPublicKey(), () => {
-            zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
+            zkapp.firstTurn(serializedTarget, serializedBoard, hostSalt, targetWitness);
           });
 
           await firstTurnTx.prove();
@@ -317,7 +327,7 @@ describe('Battleships Game Tests', () => {
 
         const rejectedAttackTx = async () => {
           let attackTx = await Mina.transaction(hostKey.toPublicKey(), () => {
-            zkapp.attack(serializedTarget, serializedBoard, targetWitness, hitWitness);
+            zkapp.attack(serializedTarget, serializedBoard, hostSalt, targetWitness, hitWitness);
           });
 
           await attackTx.prove();
@@ -335,10 +345,9 @@ describe('Battleships Game Tests', () => {
 
         const serializedBoard = BoardUtils.serialize(hostBoard);
         const serializedTarget = AttackUtils.serializeTarget([3, 4]);
-        console.log("serializedTarget: ", serializedTarget.toBigInt());
-        console.log('deserialized target: ', AttackUtils.deserializeTarget(serializedTarget).map(f => f.toBigInt()));
+
         let firstTurnTx = await Mina.transaction(hostKey.toPublicKey(), () => {
-          zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
+          zkapp.firstTurn(serializedTarget, serializedBoard, hostSalt, targetWitness);
         });
 
         await firstTurnTx.prove();
@@ -364,7 +373,7 @@ describe('Battleships Game Tests', () => {
 
         const rejectedFirstTurnTx = async () => {
           let firstTurnTx = await Mina.transaction(hostKey.toPublicKey(), () => {
-            zkapp.firstTurn(serializedTarget, serializedBoard, targetWitness);
+            zkapp.firstTurn(serializedTarget, serializedBoard, hostSalt, targetWitness);
           });
 
           await firstTurnTx.prove();
@@ -377,7 +386,7 @@ describe('Battleships Game Tests', () => {
     });
 
     describe('attack method tests', () => {
-      async function testInvalidAttack(playerKey: PrivateKey, board: number[][], errorMessage: string, falseTargetIndex=false, falseHitIndex=false, target?: number[]) {
+      async function testInvalidAttack(playerKey: PrivateKey, board: number[][], playerSalt: Field, errorMessage: string, falseTargetIndex=false, falseHitIndex=false, target?: number[]) {
         let index = zkapp.turns.get().toBigInt();
         let wTarget = targetTree.getWitness(falseTargetIndex ? index + 1n : index);
         let targetWitness = new TargetMerkleWitness(wTarget);
@@ -390,7 +399,7 @@ describe('Battleships Game Tests', () => {
 
         const rejectedAttackTx = async () => {
           let attackTx = await Mina.transaction(playerKey.toPublicKey(), () => {
-            zkapp.attack(serializedTarget, serializedBoard, targetWitness, hitWitness);
+            zkapp.attack(serializedTarget, serializedBoard, playerSalt, targetWitness, hitWitness);
           });
 
           await attackTx.prove();
@@ -400,7 +409,7 @@ describe('Battleships Game Tests', () => {
         expect(rejectedAttackTx).rejects.toThrowError(errorMessage);
       } 
 
-      async function testValidAttack(playerKey: PrivateKey, board: number[][], target: number[], expectedHitResult: boolean, expectedHitHistory: number[]) { 
+      async function testValidAttack(playerKey: PrivateKey, board: number[][], playerSalt: Field, target: number[], expectedHitResult: boolean, expectedHitHistory: number[]) { 
         let index = zkapp.turns.get().toBigInt();
         let wTarget = targetTree.getWitness(index);
         let targetWitness = new TargetMerkleWitness(wTarget);
@@ -412,7 +421,7 @@ describe('Battleships Game Tests', () => {
         const serializedTarget = AttackUtils.serializeTarget(target);
 
         let attackTx = await Mina.transaction(playerKey.toPublicKey(), () => {
-          zkapp.attack(serializedTarget, serializedBoard, targetWitness, hitWitness);
+          zkapp.attack(serializedTarget, serializedBoard, playerSalt, targetWitness, hitWitness);
         });
 
         await attackTx.prove();
@@ -447,32 +456,32 @@ describe('Battleships Game Tests', () => {
 
       it('should reject an invalid target: x coordinate', async () => {
         const errorMessage = 'Target x coordinate is out of bound!';
-        testInvalidAttack(joinerKey, joinerBoard, errorMessage, false, false, [12, 5]);
+        testInvalidAttack(joinerKey, joinerBoard, joinerSalt, errorMessage, false, false, [12, 5]);
       });
 
       it('should reject an invalid target: y coordinate', async () => {
         const errorMessage = 'Target y coordinate is out of bound!';
-        testInvalidAttack(joinerKey, joinerBoard, errorMessage, false, false, [4, 13]);
+        testInvalidAttack(joinerKey, joinerBoard, joinerSalt, errorMessage, false, false, [4, 13]);
       });
 
       it('should reject an eligible player from taking a turn out of sequence', async () => {
         const errorMessage = 'You are not allowed to attack! Please wait for your adversary to take action!';
-        await testInvalidAttack(hostKey, hostBoard, errorMessage);
+        await testInvalidAttack(hostKey, hostBoard, hostSalt, errorMessage);
       });
 
       it('should reject an intruder player from calling the attack method', async () => {
         const errorMessage = 'You are not allowed to attack! Please wait for your adversary to take action!';
-        await testInvalidAttack(intruderKey, joinerBoard, errorMessage);
+        await testInvalidAttack(intruderKey, joinerBoard, joinerSalt, errorMessage);
       });
 
       it('should reject a non-compliant target off-chain tree: false index', async () => {
         const errorMessage = 'Target storage index is not compliant with turn counter!';
-        await testInvalidAttack(joinerKey, joinerBoard, errorMessage, true);
+        await testInvalidAttack(joinerKey, joinerBoard, joinerSalt, errorMessage, true);
       });
 
       it('should reject a non-compliant hit off-chain tree: false index', async () => {
         const errorMessage = 'Hit storage index is not in sync with the target Merkle Tree';
-        await testInvalidAttack(joinerKey, joinerBoard, errorMessage, false, true);
+        await testInvalidAttack(joinerKey, joinerBoard, joinerSalt, errorMessage, false, true);
       });
       
       it('should reject a compromised target off-chain tree', async () => { 
@@ -480,7 +489,7 @@ describe('Battleships Game Tests', () => {
         targetTree.setLeaf(3n, AttackUtils.serializeTarget([4, 6]));
   
         const errorMessage = 'Off-chain target merkle tree is out of sync!';
-        await testInvalidAttack(joinerKey, joinerBoard, errorMessage);
+        await testInvalidAttack(joinerKey, joinerBoard, joinerSalt, errorMessage);
 
         // fix the local target Merkle Tree integrity for later tests
         targetTree.setLeaf(3n, Field(0));
@@ -491,7 +500,7 @@ describe('Battleships Game Tests', () => {
         hitTree.setLeaf(3n, Field(1));
 
         const errorMessage = 'Off-chain hit merkle tree is out of sync!';
-        await testInvalidAttack(joinerKey, joinerBoard, errorMessage);
+        await testInvalidAttack(joinerKey, joinerBoard, joinerSalt, errorMessage);
 
         // fix the local hit Merkle Tree integrity for later tests
         hitTree.setLeaf(3n, Field(0));
@@ -500,59 +509,61 @@ describe('Battleships Game Tests', () => {
       it('should reject eligible player with non-compliant board: joiner', async () => {
         const errorMessage = 'You are not allowed to attack! Please wait for your adversary to take action!';
         // use intruder board instead to break integrity compliance
-        await testInvalidAttack(joinerKey, intruderBoard, errorMessage);
+        await testInvalidAttack(joinerKey, intruderBoard, joinerSalt, errorMessage);
       });
 
       // player2 turn --> turn = 1 --> report Player1 Miss
       it('should accept a valid attack TX and update state on-chain: 1st check', async () => {
-        await testValidAttack(joinerKey, joinerBoard, [0, 0], false, [0, 0]);
+        await testValidAttack(joinerKey, joinerBoard, joinerSalt, [0, 0], false, [0, 0]);
       });
 
       it('should reject eligible player with non-compliant board: host', async () => {
         const errorMessage = 'You are not allowed to attack! Please wait for your adversary to take action!';
         // use intruder board instead to break integrity compliance
-        await testInvalidAttack(hostKey, intruderBoard, errorMessage);
+        await testInvalidAttack(hostKey, intruderBoard, hostSalt, errorMessage);
       });
 
       // player1 turn --> turn = 2 --> report player2 Hit
       it('should accept a valid attack TX and update state on-chain: 2nd check', async () => {
-        await testValidAttack(hostKey, hostBoard, [6, 8], true, [0, 1]);
+        await testValidAttack(hostKey, hostBoard, hostSalt, [6, 8], true, [0, 1]);
       });
 
       it('should reject player2 selecting a nullified target that caused a hit', async () => {
         const errorMessage = 'Invalid Target! Please select a unique target!' 
-        await testInvalidAttack(joinerKey, joinerBoard, errorMessage, false, false, [0, 0]);
+        await testInvalidAttack(joinerKey, joinerBoard, joinerSalt, errorMessage, false, false, [0, 0]);
       });
 
       // player2 turn --> turn = 3 -->  report player1 Hit
       it('should accept a valid attack TX and update state on-chain: 3rd check', async () => {
-        await testValidAttack(joinerKey, joinerBoard, [0, 1], true, [1, 1]);
+        await testValidAttack(joinerKey, joinerBoard, joinerSalt, [0, 1], true, [1, 1]);
       });
 
       it('should reject player1 selecting a nullified target that caused a hit', async () => {
         const errorMessage = 'Invalid Target! Please select a unique target!' 
-        await testInvalidAttack(hostKey, hostBoard, errorMessage, false, false, [6, 8]);
+        await testInvalidAttack(hostKey, hostBoard, hostSalt, errorMessage, false, false, [6, 8]);
       });
 
       // player1 turn --> turn = 4 --> report player2 Hit
       it('should accept a valid attack TX and update state on-chain: 4th check', async () => {
-        await testValidAttack(hostKey, hostBoard, [3, 7], true, [1, 2]);
+        await testValidAttack(hostKey, hostBoard, hostSalt, [3, 7], true, [1, 2]);
       });
       
       // player2 turn --> turn = 5 --> report player1 Miss
       it('should accept a valid attack TX and update state on-chain: 5th check', async () => {
-        await testValidAttack(joinerKey, joinerBoard, [9, 0], false, [1, 2]);
+        await testValidAttack(joinerKey, joinerBoard, joinerSalt, [9, 0], false, [1, 2]);
       });
 
       // player1 turn --> turn = 6 --> report player2 Miss
       it('should accept player1 sending a valid attack TX choosing a previous target that was a MISS: 6th check', async () => {
-        await testValidAttack(hostKey, hostBoard, [3, 7], false, [1, 2]);
+        await testValidAttack(hostKey, hostBoard, hostSalt, [3, 7], false, [1, 2]);
       });
 
       // player2 turn --> turn = 7 --> report player1 Miss
       it('should accept player2 sending a valid attack TX choosing a previous target that was a MISS: 6th check', async () => {
-        await testValidAttack(joinerKey, joinerBoard, [9, 0], false, [1, 2]);
+        await testValidAttack(joinerKey, joinerBoard, joinerSalt, [9, 0], false, [1, 2]);
       });
     });      
 });  
 
+//TODO objectify inputs 
+//TODO add test cases for salt

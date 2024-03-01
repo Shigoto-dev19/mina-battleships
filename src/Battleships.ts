@@ -52,7 +52,8 @@ class Battleships extends SmartContract {
         this.serializedHitHistory.set(Field(0));
     }
 
-    @method hostGame(serializedBoard1: Field) {
+    //TODO use generatePlayerID and fix notation
+    @method hostGame(serializedBoard1: Field, salt: Field) {
         // fetch on-chain player1 ID
         const host = this.player1Id.getAndRequireEquals();
         
@@ -66,11 +67,12 @@ class Battleships extends SmartContract {
         const boardHash1 = BoardCircuit.validateBoard(serializedBoard1);  
 
         // calculate host ID & store it on-chain
-        const hostId = Poseidon.hash([boardHash1, ...this.sender.toFields()]);
+        const hostId = Poseidon.hash([boardHash1, ...this.sender.toFields(), salt]);
         this.player1Id.set(hostId);
     }   
-
-    @method joinGame(serializedBoard2: Field) { 
+    
+    //TODO use generatePlayerID and fix notation
+    @method joinGame(serializedBoard2: Field, salt: Field) { 
         //TODO? check if the game is hosted
         //TODO? refer to each game to be joinable by a gameID
 
@@ -84,7 +86,7 @@ class Battleships extends SmartContract {
         const boardHash2 = BoardCircuit.validateBoard(serializedBoard2);  
         
         // calculate joiner ID & store it on-chain
-        const joinerId = Poseidon.hash([boardHash2, ...this.sender.toFields()]);
+        const joinerId = Poseidon.hash([boardHash2, ...this.sender.toFields(), salt]);
         this.player2Id.set(joinerId);
     }
 
@@ -92,13 +94,13 @@ class Battleships extends SmartContract {
      * @notice proof verification is inherently reactive
      *         first target must be made to kick off the cycle
      */
-    @method firstTurn(serializedTarget: Field, serializedBoard: Field, targetWitness: TargetMerkleWitness) {
+    @method firstTurn(serializedTarget: Field, serializedBoard: Field, salt: Field, targetWitness: TargetMerkleWitness) {
         // fetch the on-chain turn counter and verify that it is the first turn
         const turns = this.turns.getAndRequireEquals();
         turns.assertEquals(0, "Opening attack can only be played at the beginning of the game!");
 
         // generate the sender's player ID
-        const computedPlayerId = BoardUtils.generatePlayerId(serializedBoard, this.sender);
+        const computedPlayerId = BoardUtils.generatePlayerId(serializedBoard, this.sender, salt);
 
         // fetch on-chain host ID 
         const hostId = this.player1Id.getAndRequireEquals();
@@ -135,7 +137,7 @@ class Battleships extends SmartContract {
         this.turns.set(turns.add(1));
     }
 
-    @method attack(serializedTarget: Field, serializedBoard: Field, targetWitness: TargetMerkleWitness, hitWitness: HitMerkleWitness) { 
+    @method attack(serializedTarget: Field, serializedBoard: Field, salt: Field, targetWitness: TargetMerkleWitness, hitWitness: HitMerkleWitness) { 
         let turns = this.turns.getAndRequireEquals();
         turns.assertGreaterThan(0, "Please wait for the host to play the opening shot first!")
         
@@ -173,7 +175,7 @@ class Battleships extends SmartContract {
         //TODO change order and refine error message
         // assert that the current player should be the sender
         let senderBoardHash = BoardUtils.hash(deserializedBoard);
-        let senderId = Poseidon.hash([senderBoardHash, ...this.sender.toFields()]);
+        let senderId = Poseidon.hash([senderBoardHash, ...this.sender.toFields(), salt]);
         senderId.assertEquals(currentPlayerId, "You are not allowed to attack! Please wait for your adversary to take action!");
 
         // assert root index compliance with the turn counter

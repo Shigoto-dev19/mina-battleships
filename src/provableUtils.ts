@@ -57,9 +57,9 @@ class BoardUtils {
         return BoardUtils.hash(deserializedBoard);
     }
 
-    static generatePlayerId(serializedBoard: Field, playerAddress: PublicKey) {
+    static generatePlayerId(serializedBoard: Field, playerAddress: PublicKey, salt: Field) {
         const boardHash = BoardUtils.hashSerialized(serializedBoard);
-        return Poseidon.hash([boardHash, ...playerAddress.toFields()]);
+        return Poseidon.hash([boardHash, ...playerAddress.toFields(), salt]);
     }
 }
 
