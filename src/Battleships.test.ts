@@ -512,6 +512,12 @@ describe('Battleships Game Tests', () => {
         await testInvalidAttack(joinerKey, intruderBoard, joinerSalt, errorMessage);
       });
 
+      it('should reject eligible player with non-compliant salt: joiner', async () => {
+        const errorMessage = 'You are not allowed to attack! Please wait for your adversary to take action!';
+        // use a different random salt
+        await testInvalidAttack(joinerKey, joinerBoard, Field.random(), errorMessage);
+      });
+
       // player2 turn --> turn = 1 --> report Player1 Miss
       it('should accept a valid attack TX and update state on-chain: 1st check', async () => {
         await testValidAttack(joinerKey, joinerBoard, joinerSalt, [0, 0], false, [0, 0]);
@@ -521,6 +527,12 @@ describe('Battleships Game Tests', () => {
         const errorMessage = 'You are not allowed to attack! Please wait for your adversary to take action!';
         // use intruder board instead to break integrity compliance
         await testInvalidAttack(hostKey, intruderBoard, hostSalt, errorMessage);
+      });
+
+      it('should reject eligible player with non-compliant salt: host', async () => {
+        const errorMessage = 'You are not allowed to attack! Please wait for your adversary to take action!';
+        // use a different random salt
+        await testInvalidAttack(hostKey, joinerBoard, Field.random(), errorMessage);
       });
 
       // player1 turn --> turn = 2 --> report player2 Hit
@@ -566,4 +578,3 @@ describe('Battleships Game Tests', () => {
 });  
 
 //TODO objectify inputs 
-//TODO add test cases for salt

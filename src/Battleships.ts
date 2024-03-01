@@ -45,6 +45,7 @@ class Battleships extends SmartContract {
         
         this.player1Id.set(Field(0));
         this.player2Id.set(Field(0));
+        //TODO change to turnCount
         this.turns.set(UInt8.from(0));
         
         this.targetRoot.set(Field(EMPTY_TREE8_ROOT));        
