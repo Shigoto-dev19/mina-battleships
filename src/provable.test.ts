@@ -1,15 +1,18 @@
-import { Field } from 'o1js';
-import { BoardCircuit, BoardUtils, AttackCircuit } from './provableUtils';
+import { BoardCircuit, BoardUtils, AttackCircuit, AttackUtils } from './provableUtils';
 
-/*
-Each ship is an array [x, y, z] where 
-x = x coordinate on the board
-y = y coordinate on the board 
-z = is a binary where 0=horizontal & 1=verical orientation ship placements
-*/ 
-
-describe('Board Tests', () => {
+describe('Board Circuit Tests', () => {
     describe('Valid Board Checks', () => {
+        /**
+         * Tests the validity of a given board configuration.
+         * 
+         * This function takes an array representing the ship configurations on a Battleships grid.
+         * It parses the input ships, computes their hash, and serializes the board.
+         * Then, it validates the serialized board using the BoardCircuit.
+         * Finally, it compares the validation hash with the computed hash to ensure validity.
+         * 
+         * @param {number[][]} ships - An array representing the ship configurations on the board.
+         * @returns {void} - This function does not return anything but throws an error if validation fails.
+         */
         function testValidBoard(ships: number[][]) { 
             const parsedShips = BoardUtils.parse(ships);
             const hash = BoardUtils.hash(parsedShips);
@@ -55,6 +58,17 @@ describe('Board Tests', () => {
     });
 
     describe('Out of Bound Checks', () => {
+        /**
+         * Tests if a given board configuration exceeds the ragne of the game grid.
+         * 
+         * This function takes an array representing the ship configurations on a Battleships board.
+         * It attempts to serialize the board and validate it using the BoardCircuit.
+         * If the validation throws an error, it verifies that the error message matches the expected errorMessage.
+         * 
+         * @param {number[][]} ships - An array representing the ship configurations on the board.
+         * @param {string} [errorMessage] - Optional. The expected error message if the board configuration is invalid.
+         * @returns {void} - This function does not return anything but throws an error if the validation fails or if the error message mismatches.
+         */
         function testInvalidRange(ships: number[][], errorMessage?: string) {      
             const validationRangeError = () => {
                 const serializedBoard = BoardUtils.serialize(ships); 
@@ -99,6 +113,17 @@ describe('Board Tests', () => {
     });
 
     describe("Collision Checks", () => {
+        /**
+         * Tests if there are collisions in the ship placements on the board.
+         * 
+         * This function takes an array representing the ship configurations on a Battleships board
+         * and attempts to serialize the board. It then validates the board using the BoardCircuit.
+         * If the validation throws an error, it verifies that the error message matches the expected errorMessage.
+         * 
+         * @param {number[][]} ships - An array representing the ship configurations on the board.
+         * @param {string} errorMessage - The expected error message if there are collisions in the ship placements.
+         * @returns {void} - This function does not return anything but throws an error if the validation fails or if the error message mismatches.
+         */
         function testCollision(ships: number[][], errorMessage: string) { 
             const serializedBoard = BoardUtils.serialize(ships); 
             const mockCollisionError = () => {
@@ -154,11 +179,24 @@ describe('Board Tests', () => {
     });
 });
 
-describe('Attack Tests', () => {
-    describe('Correct hit assertion', () => {
-        function testValidAttack(ships: number[][], shot: number[], hit=true) { 
+describe('Attack Circuit Tests', () => {
+    describe('Correct hit report assertion', () => {
+        /**
+         * Tests if a given attack on a Battleships board is valid.
+         * 
+         * This function takes an array representing the ship configurations on a Battleships board,
+         * and a target array representing the coordinates of the attack. It then parses the ships,
+         * performs the attack using the AttackCircuit, and checks if the result matches the expected hit outcome.
+         * 
+         * @param {number[][]} ships - An array representing the ship configurations on the board.
+         * @param {number[]} target - An array representing the coordinates of the attack.
+         * @param {boolean} [hit=true] - The expected outcome of the attack, true if it's a hit, false if it's a miss.
+         * @returns {void} - This function does not return anything but throws an error if the attack result mismatches the expected hit outcome.
+         */
+        function testValidAttack(ships: number[][], target: number[], hit=true) { 
             const parsedShips = BoardUtils.parse(ships);
-            const attackResult = AttackCircuit.attack(parsedShips, shot.map(Field));
+            const parsedTarget = AttackUtils.parseTarget(target);
+            const attackResult = AttackCircuit.attack(parsedShips, parsedTarget);
             
             expect(attackResult.toBoolean()).toEqual(hit);
         }
@@ -238,10 +276,12 @@ describe('Attack Tests', () => {
         });
     });
 
-    describe("False hit assertion", () => {
-        function testInvalidAttack(ships: number[][], shot: number[], expectedAttackResult: boolean) { 
+    describe("False hit report assertion", () => {
+        // The opposite of "testValidAttack" function in line 197.
+        function testInvalidAttack(ships: number[][], target: number[], expectedAttackResult: boolean) { 
             const parsedShips = BoardUtils.parse(ships);
-            const attackResult = AttackCircuit.attack(parsedShips, shot.map(Field));
+            const parsedTarget = AttackUtils.parseTarget(target);
+            const attackResult = AttackCircuit.attack(parsedShips, parsedTarget);
             
             expect(attackResult.toBoolean()).not.toEqual(expectedAttackResult);
         }
@@ -320,10 +360,24 @@ describe('Attack Tests', () => {
     });
 
     describe('Out of bound tests', () => {
-        function testOutOfBoundAttack(ships: number[][], shot: number[], errorMessage: string) { 
+        /**
+         * Tests if an attack is out of bounds on the board.
+         * 
+         * This function takes an array representing the ship configurations on a Battleships board,
+         * a target array representing the coordinates of the attack, and an error message to expect.
+         * It then parses the ships and attempts to perform the attack using the AttackCircuit.
+         * If the attack is out of bounds, it should throw an error with the specified error message.
+         * 
+         * @param {number[][]} ships - An array representing the ship configurations on the board.
+         * @param {number[]} target - An array representing the coordinates of the attack.
+         * @param {string} errorMessage - The error message expected to be thrown if the attack is out of bounds.
+         * @returns {void} - This function does not return anything but throws an error if the attack error message mismatches.
+         */
+        function testOutOfBoundAttack(ships: number[][], target: number[], errorMessage: string) { 
             const parsedShips = BoardUtils.parse(ships);
+            const parsedTarget = AttackUtils.parseTarget(target);
             const attackError = () => {
-                AttackCircuit.attack(parsedShips, shot.map(Field));
+                AttackCircuit.attack(parsedShips, parsedTarget);
             }
             
             expect(attackError).toThrowError(errorMessage);
@@ -339,7 +393,6 @@ describe('Attack Tests', () => {
             ];
             const target1 = [-1, 3];
             testOutOfBoundAttack(ships, target1, 'Target x coordinate is out of bound!');
-           
         });
 
         it("Shot range violation turn 2: x out of bounds", () => {
