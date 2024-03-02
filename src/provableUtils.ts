@@ -204,7 +204,7 @@ class BoardCircuit {
     }
 
     /**
-     * Validate the battleships board represented by the serialized board.
+     * Deserialize board and validate ship placements.
      * @param {Field} serializedBoard - The serialized representation of the battleships board.
      * @returns {Field} The hash of the validated battleships board.
      */
@@ -259,15 +259,24 @@ class AttackUtils {
     }
 
     /**
-     * Validate a serialized target to ensure it falls within the game map range after deserialization.
+     * Validate a target falls within the game map range.
      * Throws an error if the target is out of bounds.
-     * @param {Field} serializedTarget - The serialized target as a Field object.
+     * @param {Field} serializedTarget - The target as an array of two Field elements.
      */
-    static validateTarget(serializedTarget: Field) { 
-        const target = AttackUtils.deserializeTarget(serializedTarget);
+    static validateTarget(target: Field[]) {
         target[0].assertLessThan(10, 'Target x coordinate is out of bound!');
         target[1].assertLessThan(10, 'Target y coordinate is out of bound!');
     }
+
+    /**
+     * Validate a serialized target to ensure it falls within the game map range after deserialization.
+     * Throws an error if the target is out of bounds.
+     * @param {Field} serializedTarget - The serialized target as a Field element.
+     */
+    static validateSerializedTarget(serializedTarget: Field) { 
+        const target = AttackUtils.deserializeTarget(serializedTarget);
+        AttackUtils.validateTarget(target);
+    }    
 
     /**
      * Serialize hit count history into a single Field object.
@@ -509,17 +518,16 @@ class AttackCircuit {
      * @param {Field[]} target - The x/y coordinate pair representing the adversary target.
      * @returns {Bool} True if the target hits a ship, false otherwise.
      */
-    static attack(ships: Field[][], shot: Field[]) { 
-        // Assert that the shot is within board range
-        shot[0].assertLessThan(10, 'Target x coordinate is out of bound!');
-        shot[1].assertLessThan(10, 'Target y coordinate is out of bound!');
+    static attack(ships: Field[][], target: Field[]) { 
+        // Assert that the target is within board range
+        AttackUtils.validateTarget(target);
 
         // Scan for hit on all ships
         const shipLengths = [5, 4, 3, 3, 2];
 
         let hit = Bool(false);
         for (let i=0; i<5; i++) {
-            hit = hit.or(AttackCircuit.scanShip(shot, ships[i], shipLengths[i]));
+            hit = hit.or(AttackCircuit.scanShip(target, ships[i], shipLengths[i]));
         }
 
         return hit;

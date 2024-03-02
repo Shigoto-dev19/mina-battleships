@@ -133,7 +133,7 @@ class BattleShipsClient {
 
     async playFirstTurn(firstTarget: number[]) {
         // The index of target merkle tree witness is the turn count
-        const index = this.zkapp.turns.get();
+        const index = this.zkapp.turnCount.get();
 
         const w = this.targetTree.getWitness(index.toBigInt());
         const targetWitness = new TargetMerkleWitness(w);
@@ -167,7 +167,7 @@ class BattleShipsClient {
         this.adversaryTargets.push(adversaryTarget);
         
         // Fetch the last turn count
-        const index = this.zkapp.turns.get().toBigInt();
+        const index = this.zkapp.turnCount.get().toBigInt();
 
         if (index >= 2n) {
             const previousHitResult = this.zkapp.hitResult.get().toField();
@@ -237,7 +237,7 @@ class BattleShipsClient {
     }
 
     displayPlayerStats() {
-        const turnCount = this.zkapp.turns.get().toNumber();
+        const turnCount = this.zkapp.turnCount.get().toNumber();
         const serializedHitHistory = this.zkapp.serializedHitHistory.get();
         const hitHistory = AttackUtils.deserializeHitHistory(serializedHitHistory)[0].map(f => Number(f.toBigInt()));
 

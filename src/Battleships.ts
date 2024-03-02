@@ -33,7 +33,7 @@ class HitMerkleWitness extends MerkleWitness(8) {}
 class BattleshipsZkApp extends SmartContract { 
     @state(Field) player1Id = State<Field>();
     @state(Field) player2Id = State<Field>();
-    @state(UInt8) turns = State<UInt8>();
+    @state(UInt8) turnCount = State<UInt8>();
     @state(Field) target = State<Field>();
     @state(Field) targetRoot = State<Field>();
     @state(Bool) hitResult = State<Bool>();
@@ -52,229 +52,263 @@ class BattleshipsZkApp extends SmartContract {
         
         this.player1Id.set(Field(0));
         this.player2Id.set(Field(0));
-        //TODO change to turnCount
-        this.turns.set(UInt8.from(0));
-        
+        this.turnCount.set(UInt8.from(0));
         this.targetRoot.set(Field(EMPTY_TREE8_ROOT));        
         this.hitRoot.set(EMPTY_TREE8_ROOT);
         this.serializedHitHistory.set(Field(0));
     }
 
-    //TODO use generatePlayerID and fix notation
+    /**
+     * Host a Battleships game by storing the serialized game board and generating a player ID for the host.
+     * 
+     * @param serializedBoard The serialized game board(ship placements).
+     * @param salt A cryptographic salt for player ID generation.
+     * @note The terms "host" and "player1" are used interchangeably.
+     */
     @method hostGame(serializedBoard: Field, salt: Field) {
-        // fetch the on-chain player1 ID
+        // Fetch the on-chain player1 ID
         const storedHostId = this.player1Id.getAndRequireEquals();
         
         /**
          * Assert that hostID is not updated yet.
-         * !Make sure nobody tampers with the host ID once updated!
+         * Ensure nobody tampers with the host ID once updated!
          */ 
-        storedHostId.assertEquals(0, "This game has already a host!");
+        storedHostId.assertEquals(0, "This game already has a host!");
 
-        // assert that board ship placements are valid
-        const boardHash1 = BoardCircuit.validateBoard(serializedBoard);  
+        // Assert that board ship placements are valid
+        const boardHash = BoardCircuit.validateBoard(serializedBoard);  
 
-        // calculate host ID & store it on-chain
-        const hostId = Poseidon.hash([boardHash1, ...this.sender.toFields(), salt]);
+        // Calculate host ID & store it on-chain
+        const hostId = Poseidon.hash([boardHash, ...this.sender.toFields(), salt]);
         this.player1Id.set(hostId);
 
-        // emit event for successfully hosting a battleships game
+        // Emit event for successfully hosting a Battleships game
         this.emitEvent("Game Hosted: A new Battleships game has been initiated!", hostId);
-    }   
+    }  
     
-    //TODO use generatePlayerID and fix notation
-    @method joinGame(serializedBoard2: Field, salt: Field) { 
-        //TODO? check if the game is hosted
-        //TODO? refer to each game to be joinable by a gameID
-
-        // fetch on-chain player2 ID
+    /**
+     * Join a Battleships game by storing the serialized game board and generating a player ID for the joiner.
+     * 
+     * @param serializedBoard The serialized game board(ship placements).
+     * @param salt A cryptographic salt for player ID generation.
+     * @note The terms "joiner" and "player2" are used interchangeably.
+     */
+    @method joinGame(serializedBoard: Field, salt: Field) { 
+        // Fetch the on-chain player2 ID
         const storedJoinerId = this.player2Id.getAndRequireEquals();
 
-        // assert that no one has already joined the game
+        // Assert that no one has already joined the game
         storedJoinerId.assertEquals(0, 'This game is already full!');
 
-        // assert that joiner ships placement is valid
-        const boardHash2 = BoardCircuit.validateBoard(serializedBoard2);  
+        // Assert that joiner ships placement is valid
+        const boardHash = BoardCircuit.validateBoard(serializedBoard);  
         
-        // calculate joiner ID & store it on-chain
-        const joinerId = Poseidon.hash([boardHash2, ...this.sender.toFields(), salt]);
+        // Calculate joiner ID & store it on-chain
+        const joinerId = Poseidon.hash([boardHash, ...this.sender.toFields(), salt]);
         this.player2Id.set(joinerId);
 
-        // emit event for successfully joining a battleships game
+        // Emit event for successfully joining a Battleships game
         this.emitEvent("Player Joined: A new player has joined the hosted game!", joinerId);
     }
 
     /**
-     * @notice proof verification is inherently reactive
-     *         first target must be made to kick off the cycle
+     * Initiate the first turn of the game by allowing the host player to make the opening shot.
+     * 
+     * @param serializedTarget - The serialized target for the opening shot.
+     * @param serializedBoard - The serialized game board(ship placements).
+     * @param salt - A cryptographic salt for player ID generation.
+     * @param targetWitness - The witness for the off-chain target Merkle Tree proof.
+     * 
+     * @notice Proof verification is inherently reactive, and the first target is crucial to kick off the cycle.
      */
-    @method firstTurn(serializedTarget: Field, serializedBoard: Field, salt: Field, targetWitness: TargetMerkleWitness) {
-        // fetch the on-chain turn counter and verify that it is the first turn
-        const turns = this.turns.getAndRequireEquals();
-        turns.assertEquals(0, "Opening attack can only be played at the beginning of the game!");
+    @method firstTurn(
+        serializedTarget: Field, 
+        serializedBoard: Field, 
+        salt: Field, 
+        targetWitness: TargetMerkleWitness
+    ) {
+        // Fetch the on-chain turn counter and assert that it's the first turn
+        const turnCount = this.turnCount.getAndRequireEquals();
+        turnCount.assertEquals(0, "Opening attack can only be played at the beginning of the game!");
 
-        // generate the sender's player ID
+        // Generate the sender's player ID
         const computedPlayerId = BoardUtils.generatePlayerId(serializedBoard, this.sender, salt);
 
-        // fetch on-chain host ID 
+        // Fetch on-chain host ID 
         const storedHostId = this.player1Id.getAndRequireEquals();
 
-        // restrict access to this method to the game's host
-        computedPlayerId.assertEquals(storedHostId, 'Only the host is allowed to play the opening shot!')
+        // Restrict access to this method to the game's host
+        computedPlayerId.assertEquals(storedHostId, 'Only the host is allowed to play the opening shot!');
         
-        // validate that the target is in the game map range
-        AttackUtils.validateTarget(serializedTarget);
+        // Validate that the target is in the game grid range
+        AttackUtils.validateSerializedTarget(serializedTarget);
         
-        // store the target for the adversary to prove on his board in the next turn
+        // Store the target for the adversary to prove on their board in the next turn
         this.target.set(serializedTarget);
 
-        // assert root index compliance with the turn counter
-        targetWitness.calculateIndex().assertEquals(turns.value, "Target storage index is not compliant with turn counter!");
+        // Assert root index compliance with the the turn counter
+        targetWitness.calculateIndex().assertEquals(turnCount.value, "Target storage index is not compliant with the turn counter!");
         
-        /* 
-        1. check that the address leaf is empty 
-            --> prevent updating an already full target leaf
-        2. check that the off-chain address storage is in sync
-            --> a witness of an empty leaf(before update) maintains the same root(commitiment)
-        */ 
-        let currentTargetRoot = targetWitness.calculateRoot(Field(0));
-        let storedTargetRoot = this.targetRoot.getAndRequireEquals();
-        storedTargetRoot.assertEquals(currentTargetRoot, 'Off-chain target merkle tree is out of sync!');
+        /** 
+         * 1. Check that the target leaf is empty 
+         *    --> Prevent updating an already full target leaf
+         * 2. Check that the off-chain target storage is in sync
+         *    --> A witness of an empty leaf (before update) maintains the same Merkle Tree root
+         */ 
+        const currentTargetRoot = targetWitness.calculateRoot(Field(0));
+        const storedTargetRoot = this.targetRoot.getAndRequireEquals();
+        storedTargetRoot.assertEquals(currentTargetRoot, 'Off-chain target Merkle Tree is out of sync!');
 
-        // calculate the new merkle root following the updated target root
-        let updatedTargetRoot = targetWitness.calculateRoot(serializedTarget);
+        // Calculate the new Merkle root following the updated target root
+        const updatedTargetRoot = targetWitness.calculateRoot(serializedTarget);
 
-        // update the on-chain target Merkle Tree commitment(root)
+        // Update the on-chain target Merkle Tree commitment (root)
         this.targetRoot.set(updatedTargetRoot);
 
-        // increment the turn counter
-        this.turns.set(turns.add(1));
+        // Increment the turn counter
+        this.turnCount.set(turnCount.add(1));
 
-        // emit event for successfully submitting the opening shot
+        // Emit event for successfully submitting the opening shot
         this.emitEvent("Game Started: The host has played the opening shot!", storedHostId);
     }
 
-    @method attack(serializedTarget: Field, serializedBoard: Field, salt: Field, targetWitness: TargetMerkleWitness, hitWitness: HitMerkleWitness) { 
-        let turns = this.turns.getAndRequireEquals();
-        turns.assertGreaterThan(0, "Please wait for the host to play the opening shot first!")
+    /**
+     * Report the result of the adversary's attack and select a target to retaliate 
+     * 
+     * @param serializedTarget - The serialized target for the attack.
+     * @param serializedBoard - The serialized game board.
+     * @param salt - A cryptographic salt for player ID generation.
+     * @param targetWitness - The witness for the off-chain target Merkle Tree proof.
+     * @param hitWitness - The witness for the off-chain hit Merkle Tree proof.
+     * 
+     * @notice Once first turn is called, repeatedly calling this function drives game
+     *         to completion state. Loser will always be last to call this function and end game.
+     */
+    @method attack(
+        serializedTarget: Field, 
+        serializedBoard: Field, 
+        salt: Field, 
+        targetWitness: TargetMerkleWitness, 
+        hitWitness: HitMerkleWitness
+    ) { 
+        const turnCount = this.turnCount.getAndRequireEquals();
+        turnCount.assertGreaterThan(0, "Please wait for the host to play the opening shot first!")
         
-        const isHost = turns.value.isEven();
-        let player1Id = this.player1Id.getAndRequireEquals();
-        let player2Id = this.player2Id.getAndRequireEquals();
+        const isHost = turnCount.value.isEven();
 
-        /**
-         * - If the turn count is even then it's player1 turn.
-         * - If the turn count is odd then it's player2 turn.
-         * - NOTE: The host(player1) has the privilege to attack first.
-         */
-        let currentPlayerId = Provable.if(
+        const player1Id = this.player1Id.getAndRequireEquals();
+        const player2Id = this.player2Id.getAndRequireEquals();
+
+        const currentPlayerId = Provable.if(
             isHost, 
             player1Id,
             player2Id,
         );
         
-        // fetch and deserialize the on-chain hitHistory
+        // Deserialize the current player's board
+        const deserializedBoard = BoardUtils.deserialize(serializedBoard);
+
+        // Assert that the current eligible player should be the sender
+        const senderBoardHash = BoardUtils.hash(deserializedBoard);
+        const computedPlayerId = Poseidon.hash([senderBoardHash, ...this.sender.toFields(), salt]);
+        computedPlayerId.assertEquals(currentPlayerId, "Invalid Action: either your Player ID is not compliant or it's not your turn yet!");
+
+        // Fetch the on-chain serialized hit history wrapper
         const serializedHitHistory = this.serializedHitHistory.getAndRequireEquals();
+
+        // Deserialize and retrieve players' hit count as well as targets(encoded) that landed a successful hit before
         const [
             [player1HitCount, player2HitCount], 
             [player1HitTargets, player2HitTargets],
         ] = AttackUtils.deserializeHitHistory(serializedHitHistory);
 
-        // check if there is a winner
+        // Check if there is a winner
         const isOver = player2HitCount.equals(17).or(player1HitCount.equals(17));
         
-        // block game progress if there is a winner
-        isOver.assertFalse(`Game is already over!`);
+        // Block game progress if there is a winner
+        isOver.assertFalse(`Game is already over!`);    
 
-        // deserialize board, also referred as ships
-        let deserializedBoard = BoardUtils.deserialize(serializedBoard);
-
-        //TODO change order and refine error message
-        // assert that the current player should be the sender
-        let senderBoardHash = BoardUtils.hash(deserializedBoard);
-        let senderId = Poseidon.hash([senderBoardHash, ...this.sender.toFields(), salt]);
-        senderId.assertEquals(currentPlayerId, "You are not allowed to attack! Please wait for your adversary to take action!");
-
-        // assert root index compliance with the turn counter
+        // Assert leaf index compliance with the turn counter
         const targetWitnessIndex = targetWitness.calculateIndex(); 
-        targetWitnessIndex.assertEquals(turns.value, "Target storage index is not compliant with turn counter!");
+        targetWitnessIndex.assertEquals(turnCount.value, "Target storage index is not compliant with the turn counter!");
         
-        // assert hit witness index is in sync with the target merkle tree
+        // Assert hit witness index is in sync with the target Merkle Tree
         const hitWitnessIndex = hitWitness.calculateIndex();
         hitWitnessIndex.assertEquals(targetWitnessIndex.sub(1), "Hit storage index is not in sync with the target Merkle Tree");
 
-        // validate target merkle root
-        let currentTargetRoot = targetWitness.calculateRoot(Field(0));
-        let storedTargetRoot = this.targetRoot.getAndRequireEquals();
-        storedTargetRoot.assertEquals(currentTargetRoot, 'Off-chain target merkle tree is out of sync!');
+        // Verify the target Merkle root integrity
+        const currentTargetRoot = targetWitness.calculateRoot(Field(0));
+        const storedTargetRoot = this.targetRoot.getAndRequireEquals();
+        storedTargetRoot.assertEquals(currentTargetRoot, 'Off-chain target Merkle Tree is out of sync!');
         
-        // validate hit merkle root
-        let currentHitRoot = hitWitness.calculateRoot(Field(0));
-        let storedHitRoot = this.hitRoot.getAndRequireEquals();
-        storedHitRoot.assertEquals(currentHitRoot, 'Off-chain hit merkle tree is out of sync!');
+        // Verify the hit Merkle root integrity 
+        const currentHitRoot = hitWitness.calculateRoot(Field(0));
+        const storedHitRoot = this.hitRoot.getAndRequireEquals();
+        storedHitRoot.assertEquals(currentHitRoot, 'Off-chain hit Merkle Tree is out of sync!');
 
         /**
-         * 1. Fetch adversary's serialized target from previous turn.
-         * 2. Deserialize target.
-         * 3. Validate target and return hit result.
+         * 1. Fetch adversary's serialized target from the previous turn.
+         * 2. Deserialize the target.
+         * 3. Validate the target and return the hit result.
          */ 
-        let adversarySerializedTarget = this.target.getAndRequireEquals();
-        let adversaryTarget = AttackUtils.deserializeTarget(adversarySerializedTarget);
-        let adversaryHitResult = AttackCircuit.attack(deserializedBoard, adversaryTarget);
+        const adversarySerializedTarget = this.target.getAndRequireEquals();
+        const adversaryTarget = AttackUtils.deserializeTarget(adversarySerializedTarget);
+        const adversaryHitResult = AttackCircuit.attack(deserializedBoard, adversaryTarget);
         
-        // update the on-chain hit result
+        // Update the on-chain hit result
         this.hitResult.set(adversaryHitResult);
 
-        // update hit Merkle Tree root
-        let updatedHitRoot = hitWitness.calculateRoot(adversaryHitResult.toField());
+        // Update the hit Merkle Tree root
+        const updatedHitRoot = hitWitness.calculateRoot(adversaryHitResult.toField());
         this.hitRoot.set(updatedHitRoot);
         
-        // update hit count history & serialize
-        let updatedSerializedHitCountHistory = Provable.if(
+        // Update the adversary's hit count & serialize
+        const updatedSerializedHitCountHistory = Provable.if(
             isHost, 
             AttackUtils.serializeHitCountHistory([player1HitCount, player2HitCount.add(adversaryHitResult.toField())]),
             AttackUtils.serializeHitCountHistory([player1HitCount.add(adversaryHitResult.toField()), player2HitCount]),
         );
         
+        // Deserialize the current player's target
         const playerTarget = AttackUtils.deserializeTarget(serializedTarget);
-        let isNullified = Provable.if(
+
+        // Validate that the player's target falls within battleships grid range
+        AttackUtils.validateTarget(playerTarget);
+
+        // Check that player's target is not a target that landed a successful hit before
+        const isNullified = Provable.if(
             isHost,
             AttackUtils.validateHitTargetUniqueness(playerTarget, player1HitTargets),
             AttackUtils.validateHitTargetUniqueness(playerTarget, player2HitTargets),
         );
 
         isNullified.assertFalse('Invalid Target! Please select a unique target!')
-
-        let updatedSerializedHitTargetHistory = Provable.if(
+        
+        // Update hit target history
+        const updatedSerializedHitTargetHistory = Provable.if(
             isHost,
             AttackUtils.serializeHitTargetHistory([player1HitTargets, AttackUtils.updateHitTargetHistory(adversaryTarget, adversaryHitResult, player2HitTargets, player2HitCount)]),
             AttackUtils.serializeHitTargetHistory([AttackUtils.updateHitTargetHistory(adversaryTarget, adversaryHitResult, player1HitTargets, player1HitCount), player2HitTargets]),
         );
         
-        // update the on-chain hit history
+        // Now that hit count and hit target histories are updated, update the on-chain hit history wrapper
         const updatedSerializedHitHistory = AttackUtils.serializeHitHistory(updatedSerializedHitCountHistory, updatedSerializedHitTargetHistory);
         this.serializedHitHistory.set(updatedSerializedHitHistory);
         
-        //? validate & update the on-chain serialized target
-        AttackUtils.validateTarget(serializedTarget);
+        // Update the on-chain serialized target
         this.target.set(serializedTarget);
 
-        // calculate target Merkle Tree root
-        let updatedTargetRoot = targetWitness.calculateRoot(serializedTarget);
+        // Calculate target Merkle Tree root
+        const updatedTargetRoot = targetWitness.calculateRoot(serializedTarget);
 
-        // update the on-chain target Merkle Tree root on-chain
+        // Update the on-chain target Merkle Tree root
         this.targetRoot.set(updatedTargetRoot);
 
-        // increment turn counter
-        this.turns.set(turns.add(1));
+        // Increment turn counter
+        this.turnCount.set(turnCount.add(1));
         
-        // emit event for successfully submitting a valid attack
-        this.emitEvent("Turn Wrapped Up: The current player has completed their turn!", senderId);
-    }
-    
-    @method finalizeGame() { return }
+        // Emit event for successfully submitting a valid attack and reporting the adversary's hit result 
+        this.emitEvent("Turn Wrapped Up: The current player has completed their turn!", computedPlayerId);
+    }    
 }
-
-//TODO? Reset game when finished(keep state transition in mind)
-//TODO have a last check on zkapp error handling & messages
 
