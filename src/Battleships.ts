@@ -311,4 +311,3 @@ class BattleshipsZkApp extends SmartContract {
         this.emitEvent("Turn Wrapped Up: The current player has completed their turn!", computedPlayerId);
     }    
 }
-
